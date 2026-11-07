@@ -24,7 +24,7 @@ jobs:
             "webDir": "public"
           }
           EOF
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0
+          npm install @capacitor/core@6.2.3 @capacitor/cli@6.2.3 @capacitor/android@6.2.3 @capacitor/ios@6.2.3
           rm -rf ios
           npx cap add ios
           npx cap sync ios
