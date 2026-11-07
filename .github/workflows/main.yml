@@ -16,10 +16,24 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install
-          rm -rf ios && npx cap add ios && npx cap sync ios
+          rm -f capacitor.config.ts
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "ma.plafondcheque.pro",
+            "appName": "PlafondCheque Pro",
+            "webDir": "public"
+          }
+          EOF
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0
+          rm -rf ios
+          npx cap add ios
+          npx cap sync ios
           cd ios/App
-          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO clean build
+          if [ -d "App.xcworkspace" ]; then
+            xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+          else
+            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+          fi
           mkdir -p "$GITHUB_WORKSPACE/Payload"
           cp -r build/Build/Products/Release-iphoneos/App.app "$GITHUB_WORKSPACE/Payload/"
           cd "$GITHUB_WORKSPACE"
@@ -39,14 +53,26 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
       - name: Build Android APK
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install
-          rm -rf android && npx cap add android && npx cap sync android
-          cd android && chmod +x gradlew && ./gradlew assembleDebug
+          rm -f capacitor.config.ts
+          cat << 'EOF' > capacitor.config.json
+          {
+            "appId": "ma.plafondcheque.pro",
+            "appName": "PlafondCheque Pro",
+            "webDir": "public"
+          }
+          EOF
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0
+          rm -rf android
+          npx cap add android
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android.apk"
       - uses: actions/upload-artifact@v4
         with:
