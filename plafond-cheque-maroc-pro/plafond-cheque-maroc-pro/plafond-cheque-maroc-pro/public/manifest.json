@@ -1,0 +1,36 @@
+{
+  "name": "PlafondChèque Maroc Pro — Gestion des Chèques & Plafonds Journaliers",
+  "short_name": "PlafondChèque Pro",
+  "description": "Application professionnelle de gestion des chèques, LCN et plafonds journaliers au Maroc (Desktop, Mobile & Hors-ligne)",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "fr-MA",
+  "dir": "auto",
+  "categories": ["finance", "business", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "icons/splash-1080x1920.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ]
+}
