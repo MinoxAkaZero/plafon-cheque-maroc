@@ -1,0 +1,54 @@
+name: Build iOS IPA and Android APK
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build Unsigned iOS IPA
+        run: |
+          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
+          cd "$PKG_DIR"
+          npm install
+          rm -rf ios && npx cap add ios && npx cap sync ios
+          cd ios/App
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO clean build
+          mkdir -p "$GITHUB_WORKSPACE/Payload"
+          cp -r build/Build/Products/Release-iphoneos/App.app "$GITHUB_WORKSPACE/Payload/"
+          cd "$GITHUB_WORKSPACE"
+          zip -r PlafondCheque-Maroc-Pro-iOS.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlafondCheque-Maroc-Pro-iOS-IPA
+          path: PlafondCheque-Maroc-Pro-iOS.ipa
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Build Android APK
+        run: |
+          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
+          cd "$PKG_DIR"
+          npm install
+          rm -rf android && npx cap add android && npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlafondCheque-Maroc-Pro-Android-APK
+          path: PlafondCheque-Maroc-Pro-Android.apk
