@@ -1,0 +1,33 @@
+workflows:
+  ios-and-android-cloud-build:
+    name: PlafondChèque Maroc Pro — Cloud iOS (.ipa) & Android (.apk)
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    scripts:
+      - name: Install dependencies and verify financial engine tests
+        script: |
+          npm install
+          npm test
+      - name: Build iOS .ipa (Unsigned for Sideloadly / AltStore on Windows)
+        script: |
+          rm -rf ios
+          npx cap add ios
+          npx cap sync ios
+          cd ios/App
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO clean build
+          mkdir -p ../../Payload
+          cp -r build/Build/Products/Release-iphoneos/App.app ../../Payload/
+          cd ../..
+          zip -r PlafondCheque-Maroc-Pro-iOS.ipa Payload
+      - name: Build Android .apk
+        script: |
+          rm -rf android
+          npx cap add android
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../PlafondCheque-Maroc-Pro-Android.apk
+    artifacts:
+      - PlafondCheque-Maroc-Pro-iOS.ipa
+      - PlafondCheque-Maroc-Pro-Android.apk

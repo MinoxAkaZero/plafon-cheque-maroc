@@ -25,7 +25,7 @@
     }
     body {
       font-family: 'Inter', 'Noto Sans Arabic', sans-serif;
-      background-color: #f1f5f9;
+      background-color: #f8fafc;
       color: #0f172a;
       padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px)); /* Space for mobile bottom nav + iPhone Home Indicator */
       -webkit-tap-highlight-color: transparent;
@@ -98,6 +98,32 @@
       background: #94a3b8;
       border-radius: 3px;
     }
+    /* High-comfort UI & Cheque Photo Styling */
+    .comfort-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1.25rem;
+      box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.04);
+    }
+    .photo-thumb-box {
+      position: relative;
+      overflow: hidden;
+      border-radius: 0.875rem;
+      border: 2px solid #10b981;
+      background: #0f172a;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .photo-thumb-box:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px -4px rgba(5, 150, 105, 0.25);
+    }
+    details > summary {
+      list-style: none;
+    }
+    details > summary::-webkit-details-marker {
+      display: none;
+    }
     @media print {
       .no-print {
         display: none !important;
@@ -169,7 +195,7 @@
               </h1>
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span id="lblStorageEngineBadge">IndexedDB + Hors-ligne</span>
+                <span id="lblStorageEngineBadge">✓ Sauvegarde locale active</span>
               </span>
             </div>
             <p class="text-[11px] sm:text-xs text-slate-400" id="lblHeaderCompanySub">
@@ -180,6 +206,12 @@
 
         <!-- Global Search + Language + Mode Switcher & Actions -->
         <div class="flex items-center flex-wrap gap-2">
+          <button id="btnManualSaveVerify" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Sauvegarder</span>
+          </button>
           <!-- Global Quick Search -->
           <div class="relative hidden md:block">
             <input
@@ -255,7 +287,7 @@
   <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5">
 
     <!-- Top Executive Summary KPI Bar (Always Visible & Instant Overview) -->
-    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 no-print">
+    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5 no-print">
       <!-- KPI 1: Plafond par jour ouvrable -->
       <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex flex-col justify-between">
         <div class="flex items-center justify-between gap-1">
@@ -630,31 +662,86 @@
             </div>
           </div>
 
-          <!-- Distribution Mode Strategy + Notes -->
-          <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-2.5">
-            <div class="flex items-center justify-between flex-wrap gap-1">
-              <label for="selectModeRepartition" class="text-xs font-bold uppercase tracking-wide text-slate-700">
-                Stratégie de répartition si dépassement du plafond journalier
-              </label>
-              <span class="text-[11px] text-emerald-700 font-semibold">Explication détaillée par chèque incluse</span>
+          <!-- NEW: Cheque Photo Capture & Upload Module (Camera + Gallery) -->
+          <div class="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200/90 space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <span class="text-xs font-bold uppercase tracking-wide text-emerald-950 flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Photo du Chèque (Optionnel — Caméra ou Galerie)
+                </span>
+                <p class="text-[11px] text-emerald-800 mt-0.5">Prenez le chèque en photo avec votre téléphone pour garder une preuve visuelle avec l'opération.</p>
+              </div>
+              <span class="arabic-hint text-xs font-bold text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">صورة الشيك</span>
             </div>
-            <select
-              id="selectModeRepartition"
-              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:border-emerald-600 outline-none"
-            >
-              <option value="backward">1. Anticipation stricte (Recul) : Au plus proche de l'échéance puis recul sur les jours ouvrables précédents (≤ Date limite)</option>
-              <option value="forward_window">2. Répartition du début à la fin (Avance) : Étaler dès le premier jour ouvrable disponible avant la date limite</option>
-              <option value="overflow_after">3. Report après échéance autorisé : Si tous les jours avant la date limite sont pleins, reporter sur le jour ouvré suivant</option>
-            </select>
-            <div>
-              <input
-                id="inputOperationNotes"
-                type="text"
-                placeholder="Note / Référence facture optionnelle (Ex : Facture Acier N° FA-2026-890)"
-                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-emerald-600 outline-none"
-              />
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <label for="inputChequePhotoCamera" class="flex-1 min-w-[160px] py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm inline-flex items-center justify-center gap-2 cursor-pointer shadow-xs transition">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Prendre une photo</span>
+                <input id="inputChequePhotoCamera" type="file" accept="image/*" capture="environment" class="hidden" />
+              </label>
+
+              <label for="inputChequePhotoGallery" class="flex-1 min-w-[150px] py-2.5 px-3.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 cursor-pointer transition">
+                <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Choisir dans la galerie</span>
+                <input id="inputChequePhotoGallery" type="file" accept="image/*" class="hidden" />
+              </label>
+
+              <button id="btnClearDraftPhoto" type="button" class="hidden py-2.5 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs transition">
+                Retirer photo
+              </button>
+            </div>
+
+            <!-- Live Thumbnail Preview when a photo is captured/selected -->
+            <div id="draftPhotoPreviewWrapper" class="hidden items-center gap-3 bg-white p-2.5 rounded-xl border border-emerald-200">
+              <img id="draftPhotoPreviewImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Aperçu photo du chèque" class="w-20 h-14 object-cover rounded-lg border border-slate-300 cursor-pointer" />
+              <div class="flex-1 text-xs">
+                <div class="font-bold text-emerald-900">✓ Photo du chèque prête à être enregistrée</div>
+                <div class="text-slate-500">Touchez la miniature pour agrandir la photo en plein écran.</div>
+              </div>
             </div>
           </div>
+
+          <!-- Collapsible Advanced Options (Keeps interface clean & comfortable by default) -->
+          <details class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+            <summary class="px-3.5 py-2.5 text-xs font-bold text-slate-600 cursor-pointer flex items-center justify-between hover:bg-slate-100/80">
+              <span>⚙️ Options avancées (Mode de répartition &amp; Note / Facture)</span>
+              <span class="text-[11px] text-emerald-700 font-semibold">Cliquer pour ouvrir ▾</span>
+            </summary>
+            <div class="p-3.5 pt-2 border-t border-slate-200 space-y-2.5">
+              <div class="flex items-center justify-between flex-wrap gap-1">
+                <label for="selectModeRepartition" class="text-xs font-bold uppercase tracking-wide text-slate-700">
+                  Stratégie de répartition si dépassement du plafond journalier
+                </label>
+                <span class="text-[11px] text-emerald-700 font-semibold">Explication détaillée incluse</span>
+              </div>
+              <select
+                id="selectModeRepartition"
+                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm font-medium text-slate-800 focus:border-emerald-600 outline-none"
+              >
+                <option value="backward">1. Anticipation stricte (Recul) : Au plus proche de l'échéance puis recul sur les jours ouvrables précédents (≤ Date limite)</option>
+                <option value="forward_window">2. Répartition du début à la fin (Avance) : Étaler dès le premier jour ouvrable disponible avant la date limite</option>
+                <option value="overflow_after">3. Report après échéance autorisé : Si tous les jours avant la date limite sont pleins, reporter sur le jour ouvré suivant</option>
+              </select>
+              <div>
+                <input
+                  id="inputOperationNotes"
+                  type="text"
+                  placeholder="Note / Référence facture optionnelle (Ex : Facture Acier N° FA-2026-890)"
+                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-emerald-600 outline-none"
+                />
+              </div>
+            </div>
+          </details>
 
           <!-- Dynamic Simulation Box (Date de saisie, Date limite calendaire, Date d'échéance anticipée + Step-by-step explanation) -->
           <div class="rounded-xl bg-slate-900 text-white p-4 space-y-3 border border-slate-800">
@@ -1254,12 +1341,45 @@
             <input id="editChequeDatePaiement" type="date" required class="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold" />
           </div>
         </div>
+        <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <label for="editChequePhotoInput" class="text-xs font-bold text-slate-700">Photo de ce chèque (Caméra ou Galerie)</label>
+            <button type="button" id="btnRemoveEditChequePhoto" class="hidden text-xs font-semibold text-rose-600 hover:underline">Supprimer la photo</button>
+          </div>
+          <input id="editChequePhotoInput" type="file" accept="image/*" class="w-full text-xs text-slate-600" />
+          <div id="editChequePhotoPreviewBox" class="hidden pt-1">
+            <img id="editChequePhotoPreviewImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Photo du chèque" class="h-24 rounded-lg border border-slate-300 object-cover cursor-pointer" />
+          </div>
+        </div>
         <p id="editChequeValidationWarning" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 hidden"></p>
         <div class="flex items-center justify-end gap-2 pt-2">
           <button type="button" id="btnCloseChequeModal" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700">Annuler</button>
           <button type="submit" id="btnSaveChequeModal" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white">Enregistrer le chèque</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Full-Screen Cheque Photo Viewer Modal (Lightbox) -->
+  <div id="chequePhotoLightboxModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4 no-print">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-3xl w-full p-4 sm:p-6 text-white shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 id="lightboxChequeTitle" class="text-sm sm:text-base font-bold text-white">Photo du Chèque</h3>
+          <p id="lightboxChequeSubtitle" class="text-xs text-slate-400">Preuve visuelle enregistrée sur cet appareil</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="btnDownloadChequePhoto" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" download="photo_cheque.jpg" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">
+            Télécharger l'image
+          </a>
+          <button type="button" id="btnClosePhotoLightbox" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition">
+            Fermer ✕
+          </button>
+        </div>
+      </div>
+      <div class="flex items-center justify-center bg-slate-950 rounded-2xl p-2 max-h-[72vh] overflow-auto">
+        <img id="lightboxChequeImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Photo du chèque agrandie" class="max-w-full max-h-[68vh] object-contain rounded-xl" />
+      </div>
     </div>
   </div>
 
@@ -1387,6 +1507,7 @@
 
     // Application State
     let state = {
+      hasInitializedOnce: false,
       plafondJournalier: 10000000, // Configurable user-defined daily ceiling (default 10,000,000 DH)
       selectedEcheance: 7,
       lwalidMode: false,
@@ -1400,6 +1521,42 @@
       holidays: [...DEFAULT_MOROCCAN_HOLIDAYS],
       operations: []
     };
+
+    let currentDraftPhotoDataUrl = null;
+    let currentEditModalPhotoDataUrl = null;
+    const DRAFT_STORAGE_KEY = 'plafond_cheque_draft_v2';
+
+    // Client-side Canvas JPEG Compressor so Cheque Photos save fast in localStorage & IndexedDB
+    function compressImageFileToDataURL(file, maxWidth = 1100, quality = 0.78) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          resolve(null);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width;
+            let h = img.height;
+            if (w > maxWidth) {
+              h = Math.round((h * maxWidth) / w);
+              w = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = () => reject(new Error('Image invalide'));
+          img.src = String(e.target.result);
+        };
+        reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
+        reader.readAsDataURL(file);
+      });
+    }
 
     let chartDailyInstance = null;
     let chartBankInstance = null;
@@ -1847,9 +2004,12 @@
     }
 
     async function saveState() {
+      state.hasInitializedOnce = true;
+      const nowIso = new Date().toISOString();
       const payload = {
         id: 'main_profile',
-        updatedAt: new Date().toISOString(),
+        hasInitializedOnce: true,
+        updatedAt: nowIso,
         plafondJournalier: state.plafondJournalier,
         lwalidMode: state.lwalidMode,
         language: state.language,
@@ -1860,50 +2020,112 @@
         operations: state.operations
       };
 
+      const serialized = JSON.stringify(payload);
+      // 1. Synchronous write to localStorage first (guarantees instant persistence on Android/iOS APK even if closed immediately)
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        localStorage.setItem(STORAGE_KEY, serialized);
+        localStorage.setItem('plafond_cheque_maroc_v1', serialized);
       } catch (e) {
-        // Fallback if localStorage quota or sandbox restriction
+        // Fallback if quota reached
       }
 
+      // 2. Mirror to sessionStorage & window.name as backup within session
+      try {
+        sessionStorage.setItem(STORAGE_KEY, serialized);
+      } catch (e) {}
+
+      // 3. Asynchronous write to IndexedDB (supports large photo attachments)
       try {
         const db = await openIndexedDB();
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).put(payload);
-      } catch (e) {
-        // IndexedDB fallback handled by localStorage
-      }
+        await new Promise((resolve) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.objectStore(IDB_STORE).put(payload);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        });
+      } catch (e) {}
 
+      const timeStr = new Date().toLocaleTimeString('fr-FR');
       const lblBackup = document.getElementById('lblLastAutoBackupTime');
-      if (lblBackup) {
-        lblBackup.textContent = new Date().toLocaleTimeString('fr-FR');
-      }
+      if (lblBackup) lblBackup.textContent = timeStr;
+      const badge = document.getElementById('lblStorageEngineBadge');
+      if (badge) badge.textContent = `✓ Sauvegardé (${timeStr})`;
+    }
+
+    function saveDraftForm() {
+      try {
+        const draft = {
+          beneficiaire: document.getElementById('inputBeneficiaire')?.value || '',
+          banque: document.getElementById('selectBanque')?.value || 'Attijariwafa Bank',
+          numCheque: document.getElementById('inputNumCheque')?.value || '',
+          montant: document.getElementById('inputMontant')?.value || '',
+          dateSaisie: document.getElementById('inputDateSaisie')?.value || '2026-11-07',
+          echeance: state.selectedEcheance,
+          notes: document.getElementById('inputOperationNotes')?.value || '',
+          photoDataUrl: currentDraftPhotoDataUrl
+        };
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+      } catch (e) {}
+    }
+
+    function loadDraftForm() {
+      try {
+        const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        if (!draft || typeof draft !== 'object') return;
+        if (draft.beneficiaire) document.getElementById('inputBeneficiaire').value = draft.beneficiaire;
+        if (draft.banque) document.getElementById('selectBanque').value = draft.banque;
+        if (draft.numCheque) document.getElementById('inputNumCheque').value = draft.numCheque;
+        if (draft.montant) document.getElementById('inputMontant').value = draft.montant;
+        if (draft.dateSaisie) document.getElementById('inputDateSaisie').value = draft.dateSaisie;
+        if (draft.notes) document.getElementById('inputOperationNotes').value = draft.notes;
+        if (draft.echeance) state.selectedEcheance = Number(draft.echeance);
+        if (draft.photoDataUrl) {
+          setDraftPhotoPreview(draft.photoDataUrl);
+        }
+      } catch (e) {}
+    }
+
+    function clearDraftForm() {
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch (e) {}
     }
 
     async function loadState() {
-      let loaded = null;
+      let idbData = null;
+      let lsData = null;
+
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('plafond_cheque_maroc_v1') || sessionStorage.getItem(STORAGE_KEY);
+        if (raw) lsData = JSON.parse(raw);
+      } catch (e) {
+        lsData = null;
+      }
+
       try {
         const db = await openIndexedDB();
-        loaded = await new Promise((resolve) => {
+        idbData = await new Promise((resolve) => {
           const tx = db.transaction(IDB_STORE, 'readonly');
           const req = tx.objectStore(IDB_STORE).get('main_profile');
           req.onsuccess = () => resolve(req.result || null);
           req.onerror = () => resolve(null);
         });
       } catch (e) {
-        loaded = null;
+        idbData = null;
       }
 
-      if (!loaded) {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('plafond_cheque_maroc_v1');
-          if (raw) loaded = JSON.parse(raw);
-        } catch (e) {
-          loaded = null;
-        }
+      // Pick whichever store has the newest updatedAt timestamp so synchronous localStorage writes are never overwritten by stale IDB
+      let loaded = idbData || lsData;
+      if (idbData && lsData) {
+        const tIdb = Date.parse(idbData.updatedAt || '') || 0;
+        const tLs = Date.parse(lsData.updatedAt || '') || 0;
+        loaded = tLs >= tIdb ? lsData : idbData;
       }
 
       if (loaded && typeof loaded === 'object') {
+        state.hasInitializedOnce = Boolean(loaded.hasInitializedOnce || Array.isArray(loaded.operations));
         if (loaded.plafondJournalier) state.plafondJournalier = Number(loaded.plafondJournalier);
         if (typeof loaded.lwalidMode === 'boolean') state.lwalidMode = loaded.lwalidMode;
         if (loaded.language) state.language = loaded.language;
@@ -1921,11 +2143,13 @@
         if (Array.isArray(loaded.operations)) {
           state.operations = loaded.operations.map(op => ({
             ...op,
+            photoDataUrl: op.photoDataUrl || null,
             createdAt: op.createdAt || new Date().toISOString(),
             updatedAt: op.updatedAt || new Date().toISOString(),
             tranches: (op.tranches || []).map((tr, i) => ({
               ...tr,
               id: tr.id || `chq_${op.id}_${i}`,
+              photoDataUrl: tr.photoDataUrl || op.photoDataUrl || null,
               status: tr.status || 'scheduled',
               explicationDate: tr.explicationDate || `Planifié sur le jour ouvrable ${tr.date} dans le respect du plafond journalier.`
             }))
@@ -2070,6 +2294,31 @@
               <span class="font-bold text-emerald-700 shrink-0">Justification date :</span>
               <span>${escapeHtml(explication)} (Émission : ${escapeHtml(dateEmission)})</span>
             </div>
+
+            ${(tranche.photoDataUrl || (opMeta && opMeta.photoDataUrl)) ? `
+            <div class="pt-1 flex items-center justify-between gap-3 bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5">
+              <div class="flex items-center gap-2.5">
+                <img
+                  src="${escapeHtml(tranche.photoDataUrl || opMeta.photoDataUrl)}"
+                  alt="Photo du chèque ${escapeHtml(tranche.numCheque)}"
+                  data-view-photo="${escapeHtml(tranche.photoDataUrl || opMeta.photoDataUrl)}"
+                  data-view-title="Chèque ${escapeHtml(tranche.numCheque)} — ${escapeHtml(benName)} (${formatDH(tranche.montant)})"
+                  class="btn-view-cheque-photo w-16 h-11 object-cover rounded-lg border-2 border-emerald-500 cursor-pointer shadow-2xs"
+                />
+                <div class="text-xs">
+                  <div class="font-bold text-emerald-950">📸 Photo du chèque jointe</div>
+                  <button
+                    type="button"
+                    data-view-photo="${escapeHtml(tranche.photoDataUrl || opMeta.photoDataUrl)}"
+                    data-view-title="Chèque ${escapeHtml(tranche.numCheque)} — ${escapeHtml(benName)} (${formatDH(tranche.montant)})"
+                    class="btn-view-cheque-photo text-[11px] font-bold text-emerald-700 underline"
+                  >
+                    Agrandir la photo en plein écran 🔍
+                  </button>
+                </div>
+              </div>
+            </div>
+            ` : ''}
           </div>
 
           ${actionToolbar}
@@ -2145,7 +2394,7 @@
       explainEl.innerHTML = explanationParts.join('');
 
       liveChequeContainer.innerHTML = sim.tranches
-        .map((tr, i) => renderChequeCardHTML(tr, beneficiaire, banque, i, sim.tranches.length))
+        .map((tr, i) => renderChequeCardHTML({ ...tr, photoDataUrl: currentDraftPhotoDataUrl }, beneficiaire, banque, i, sim.tranches.length))
         .join('');
     }
 
@@ -2298,8 +2547,9 @@
             <div class="flex items-start justify-between gap-2">
               <div>
                 <div class="font-bold text-slate-900">${escapeHtml(op.beneficiaire || 'Opération Chèque')} · <span class="text-emerald-700">${formatDH(activeSum)}</span></div>
-                <div class="text-slate-500 mt-0.5">
-                  Émission : ${escapeHtml(op.dateSaisie)} · Échéance ${op.echeanceDays}j · ${op.tranches.length} chèque(s) · ${escapeHtml(op.banque)}
+                <div class="text-slate-500 mt-0.5 flex items-center flex-wrap gap-1.5">
+                  <span>Émission : ${escapeHtml(op.dateSaisie)} · Échéance ${op.echeanceDays}j · ${op.tranches.length} chèque(s) · ${escapeHtml(op.banque)}</span>
+                  ${op.photoDataUrl ? `<button type="button" data-view-photo="${escapeHtml(op.photoDataUrl)}" data-view-title="Opération ${escapeHtml(op.beneficiaire)} (${formatDH(activeSum)})" class="btn-view-cheque-photo inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-bold text-[10px]">📸 Voir Photo Chèque</button>` : ''}
                 </div>
                 ${op.notes ? `<div class="text-[11px] text-slate-600 italic mt-0.5">Réf : ${escapeHtml(op.notes)}</div>` : ''}
               </div>
@@ -2842,6 +3092,106 @@
         });
       }
 
+      // Helper to update draft photo preview UI
+      window.setDraftPhotoPreview = function(dataUrl) {
+        currentDraftPhotoDataUrl = dataUrl || null;
+        const wrap = document.getElementById('draftPhotoPreviewWrapper');
+        const img = document.getElementById('draftPhotoPreviewImg');
+        const clearBtn = document.getElementById('btnClearDraftPhoto');
+        if (currentDraftPhotoDataUrl) {
+          img.src = currentDraftPhotoDataUrl;
+          wrap.classList.remove('hidden');
+          wrap.classList.add('flex');
+          clearBtn.classList.remove('hidden');
+        } else {
+          wrap.classList.add('hidden');
+          wrap.classList.remove('flex');
+          clearBtn.classList.add('hidden');
+        }
+        updateLiveSimulationAndPreview();
+      };
+
+      async function handleDraftPhotoInput(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const compressed = await compressImageFileToDataURL(file);
+          setDraftPhotoPreview(compressed);
+          saveDraftForm();
+          showToast('📸 Photo du chèque ajoutée et compressée');
+        } catch (err) {
+          showToast('Impossible de lire cette image');
+        }
+        e.target.value = '';
+      }
+
+      document.getElementById('inputChequePhotoCamera')?.addEventListener('change', handleDraftPhotoInput);
+      document.getElementById('inputChequePhotoGallery')?.addEventListener('change', handleDraftPhotoInput);
+      document.getElementById('btnClearDraftPhoto')?.addEventListener('click', () => {
+        setDraftPhotoPreview(null);
+        saveDraftForm();
+        showToast('Photo retirée du brouillon');
+      });
+
+      // Lightbox viewer for full-screen cheque photos
+      const lightboxModal = document.getElementById('chequePhotoLightboxModal');
+      function openPhotoLightbox(dataUrl, titleText) {
+        if (!dataUrl || !lightboxModal) return;
+        document.getElementById('lightboxChequeImg').src = dataUrl;
+        document.getElementById('btnDownloadChequePhoto').href = dataUrl;
+        document.getElementById('lightboxChequeTitle').textContent = titleText || 'Photo du Chèque';
+        lightboxModal.classList.remove('hidden');
+        lightboxModal.classList.add('flex');
+      }
+      document.getElementById('btnClosePhotoLightbox')?.addEventListener('click', () => {
+        lightboxModal.classList.add('hidden');
+        lightboxModal.classList.remove('flex');
+      });
+      document.getElementById('draftPhotoPreviewImg')?.addEventListener('click', () => {
+        if (currentDraftPhotoDataUrl) openPhotoLightbox(currentDraftPhotoDataUrl, 'Aperçu Photo du Chèque (Brouillon)');
+      });
+      document.getElementById('editChequePhotoPreviewImg')?.addEventListener('click', () => {
+        if (currentEditModalPhotoDataUrl) openPhotoLightbox(currentEditModalPhotoDataUrl, 'Photo du Chèque');
+      });
+
+      // Individual Cheque Modal Photo Upload
+      document.getElementById('editChequePhotoInput')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          currentEditModalPhotoDataUrl = await compressImageFileToDataURL(file);
+          document.getElementById('editChequePhotoPreviewImg').src = currentEditModalPhotoDataUrl;
+          document.getElementById('editChequePhotoPreviewBox').classList.remove('hidden');
+          document.getElementById('btnRemoveEditChequePhoto').classList.remove('hidden');
+          showToast('📸 Photo chargée pour ce chèque');
+        } catch (err) {
+          showToast('Erreur lors du chargement de la photo');
+        }
+        e.target.value = '';
+      });
+
+      document.getElementById('btnRemoveEditChequePhoto')?.addEventListener('click', () => {
+        currentEditModalPhotoDataUrl = null;
+        document.getElementById('editChequePhotoPreviewBox').classList.add('hidden');
+        document.getElementById('btnRemoveEditChequePhoto').classList.add('hidden');
+      });
+
+      document.body.addEventListener('click', (e) => {
+        const viewBtn = e.target.closest('.btn-view-cheque-photo');
+        if (viewBtn) {
+          openPhotoLightbox(viewBtn.getAttribute('data-view-photo'), viewBtn.getAttribute('data-view-title'));
+        }
+      });
+
+      // Restore any unsaved draft inputs from previous session
+      loadDraftForm();
+
+      // Auto-save draft form on every input change so user never loses typed fields
+      ['inputMontant', 'inputDateSaisie', 'inputBeneficiaire', 'selectBanque', 'inputNumCheque', 'inputOperationNotes'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', saveDraftForm);
+        document.getElementById(id)?.addEventListener('change', saveDraftForm);
+      });
+
       applyLwalidModeUI();
       applyLanguageUI();
 
@@ -2913,6 +3263,15 @@
           state.calendarViewYear++;
         }
         renderKPIsAndAllViews();
+      });
+
+      // Manual Save & Verify Button
+      document.getElementById('btnManualSaveVerify')?.addEventListener('click', async () => {
+        saveDraftForm();
+        await saveState();
+        const totalOps = state.operations.length;
+        const totalPhotos = state.operations.reduce((acc, op) => acc + (op.photoDataUrl ? 1 : 0), 0);
+        showToast(`✓ Sauvegarde confirmée sur l'appareil : ${totalOps} opération(s) et ${totalPhotos} photo(s) enregistrées.`);
       });
 
       // Lwalid Mode Toggle
@@ -3007,9 +3366,15 @@
 
         const sim = simulateDistribution(montant, dateSaisie, state.selectedEcheance, mode, numChequeBase, editingId);
 
+        const tranchesWithPhoto = sim.tranches.map(tr => ({
+          ...tr,
+          photoDataUrl: currentDraftPhotoDataUrl || null
+        }));
+
         if (editingId) {
           const idx = state.operations.findIndex(o => o.id === editingId);
           if (idx !== -1) {
+            const preservedPhoto = currentDraftPhotoDataUrl || state.operations[idx].photoDataUrl || null;
             state.operations[idx] = {
               ...state.operations[idx],
               beneficiaire,
@@ -3022,14 +3387,17 @@
               dateOuvrableCible: sim.dateOuvrableCible,
               mode,
               notes,
+              photoDataUrl: preservedPhoto,
               updatedAt: new Date().toISOString(),
-              tranches: sim.tranches
+              tranches: tranchesWithPhoto.map(t => ({ ...t, photoDataUrl: preservedPhoto }))
             };
           }
           exitEditOperationMode();
+          setDraftPhotoPreview(null);
+          clearDraftForm();
           saveState();
           renderKPIsAndAllViews();
-          showToast(`Opération mise à jour et plafonds recalculés (${sim.tranches.length} chèque(s))`);
+          showToast(`✓ Opération mise à jour et sauvegardée (${sim.tranches.length} chèque(s))`);
         } else {
           const newOp = {
             id: 'op_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -3043,17 +3411,20 @@
             dateOuvrableCible: sim.dateOuvrableCible,
             mode,
             notes,
+            photoDataUrl: currentDraftPhotoDataUrl || null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            tranches: sim.tranches
+            tranches: tranchesWithPhoto
           };
 
           state.operations.push(newOp);
+          setDraftPhotoPreview(null);
+          clearDraftForm();
           saveState();
           document.getElementById('inputMontant').value = '';
           document.getElementById('inputOperationNotes').value = '';
           renderKPIsAndAllViews();
-          showToast(`Opération enregistrée : ${sim.tranches.length} chèque(s) planifié(s) pour ${beneficiaire}`);
+          showToast(`✓ Enregistré sur l'appareil : ${sim.tranches.length} chèque(s) pour ${beneficiaire}`);
         }
       });
 
@@ -3183,6 +3554,16 @@
           document.getElementById('editChequeDateSaisie').value = op.dateSaisie;
           document.getElementById('editChequeDatePaiement').value = tr.date;
         }
+        const existingPhoto = opId ? (state.operations.find(o => o.id === opId)?.tranches?.[trIdx]?.photoDataUrl || state.operations.find(o => o.id === opId)?.photoDataUrl || null) : null;
+        currentEditModalPhotoDataUrl = existingPhoto;
+        if (existingPhoto) {
+          document.getElementById('editChequePhotoPreviewImg').src = existingPhoto;
+          document.getElementById('editChequePhotoPreviewBox').classList.remove('hidden');
+          document.getElementById('btnRemoveEditChequePhoto').classList.remove('hidden');
+        } else {
+          document.getElementById('editChequePhotoPreviewBox').classList.add('hidden');
+          document.getElementById('btnRemoveEditChequePhoto').classList.add('hidden');
+        }
         chequeModal.classList.remove('hidden');
         chequeModal.classList.add('flex');
       }
@@ -3245,6 +3626,7 @@
             op.tranches[trIdx].montant = amt;
             op.tranches[trIdx].status = st;
             op.tranches[trIdx].date = dPay;
+            op.tranches[trIdx].photoDataUrl = currentEditModalPhotoDataUrl;
             op.updatedAt = new Date().toISOString();
             op.montantTotal = fromCentimes(op.tranches.reduce((s, t) => s + toCentimes(t.montant), 0));
           }
@@ -3741,8 +4123,8 @@
         showToast('Fichier CSV (Excel) téléchargé');
       });
 
-      // If no operations yet, initialize with 1 realistic operation so the app is immediately informative
-      if (state.operations.length === 0) {
+      // Only seed the initial example on very first launch (!state.hasInitializedOnce)
+      if (!state.hasInitializedOnce && state.operations.length === 0) {
         const sampleSim = simulateDistribution(15000000, '2026-11-07', 7, 'backward', 'AWB-88401');
         state.operations.push({
           id: 'op_init_1',
