@@ -1,8 +1,3 @@
-/**
- * Moroccan Working-Day Calendar Engine
- * Excludes Saturdays (6), Sundays (0), National Holidays, Estimated Religious Holidays, and Custom Holidays.
- */
-
 export const DEFAULT_MOROCCAN_HOLIDAYS = [
   { date: '2026-01-01', label: 'Nouvel An', labelAr: 'رأس السنة الميلادية', labelEn: 'New Year’s Day', type: 'national', estimated: false },
   { date: '2026-01-11', label: 'Manifeste de l’Indépendance', labelAr: 'تقديم وثيقة الاستقلال', labelEn: 'Proclamation of Independence', type: 'national', estimated: false },
@@ -81,11 +76,6 @@ export function isBusinessDay(ymdStr, holidays = DEFAULT_MOROCCAN_HOLIDAYS) {
   return getNonWorkingDayReason(ymdStr, holidays).isWorking;
 }
 
-/**
- * Anticipation Rule:
- * If a maturity date falls on a weekend or Moroccan public holiday, anticipate to the last preceding business day.
- * If anticipating goes strictly before minAllowedYMD (and minAllowedYMD itself was a weekend/holiday), move to first business day >= minAllowedYMD.
- */
 export function getAnticipatedBusinessDay(targetYMD, minAllowedYMD, holidays = DEFAULT_MOROCCAN_HOLIDAYS) {
   let current = targetYMD;
   const skippedDays = [];

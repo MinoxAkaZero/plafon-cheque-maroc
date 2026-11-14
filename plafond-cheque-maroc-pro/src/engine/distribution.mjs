@@ -1,11 +1,3 @@
-/**
- * Automatic Daily Ceiling Distribution Engine (Exact Integer Centime Precision)
- * Preserves and improves the 3 strategies:
- * 1. 'backward' (Anticipation stricte: from target working due date backward toward issue date)
- * 2. 'forward_window' (Lissage début -> fin: from issue date forward up to target working due date)
- * 3. 'overflow_after' (Report après échéance autorisé)
- */
-
 import {
   addCalendarDays,
   getNonWorkingDayReason,
@@ -27,12 +19,35 @@ export function computeScheduledCentimesByDate(operations, excludeOperationId = 
   for (const op of (operations || [])) {
     if (excludeOperationId && op.id === excludeOperationId) continue;
     for (const tr of (op.tranches || [])) {
-      if (tr.status === 'cancelled') continue; // Cancelled checks free up daily ceiling capacity
+      if (tr.status === 'cancelled' || tr.status === 'expired') continue;
       const c = toCentimes(tr.montant);
       map[tr.date] = (map[tr.date] || 0) + c;
     }
   }
   return map;
+}
+
+export function detectDuplicateCheque(operations, { numCheque, beneficiaire, montant, dateSaisie, excludeOperationId = null }) {
+  const cleanNum = String(numCheque || '').trim().toLowerCase();
+  const cleanBen = String(beneficiaire || '').trim().toLowerCase();
+  const targetCentimes = toCentimes(montant);
+  for (const op of (operations || [])) {
+    if (excludeOperationId && op.id === excludeOperationId) continue;
+    for (const tr of (op.tranches || [])) {
+      if (tr.status === 'cancelled') continue;
+      if (cleanNum && !cleanNum.startsWith('chq-') && String(tr.numCheque || '').trim().toLowerCase() === cleanNum) {
+        return { isDuplicate: true, reason: `Le numéro de chèque "${tr.numCheque}" existe déjà (${op.beneficiaire}, ${tr.date}).` };
+      }
+    }
+    if (cleanBen && !cleanBen.startsWith('chèque #') && !cleanBen.startsWith('fournisseur #')) {
+      if (String(op.beneficiaire || '').trim().toLowerCase() === cleanBen &&
+          toCentimes(op.montantTotal) === targetCentimes &&
+          op.dateSaisie === dateSaisie) {
+        return { isDuplicate: true, reason: `Une opération identique pour "${op.beneficiaire}" (${op.montantTotal} DH le ${dateSaisie}) existe déjà.` };
+      }
+    }
+  }
+  return { isDuplicate: false, reason: null };
 }
 
 export function incrementChequeNumber(baseChequeNum, index, totalCount) {
@@ -44,9 +59,7 @@ export function incrementChequeNumber(baseChequeNum, index, totalCount) {
     const paddedLen = numericMatch[2].length;
     return prefix + String(startNum + index).padStart(paddedLen, '0');
   }
-  if (cleanNum) {
-    return totalCount > 1 ? `${cleanNum}-${index + 1}` : cleanNum;
-  }
+  if (cleanNum) return totalCount > 1 ? `${cleanNum}-${index + 1}` : cleanNum;
   return `CHQ-${String(index + 1).padStart(3, '0')}`;
 }
 
@@ -70,28 +83,20 @@ export function simulateDistribution({
 
   if (totalCentimes <= 0 || plafondCentimes <= 0) {
     return {
-      dateSaisie,
-      echeanceDays,
-      dateLimiteBrute,
+      dateSaisie, echeanceDays, dateLimiteBrute,
       nonWorkingReason: bruteCheck.reason,
       skippedDays: ant.skippedDays,
-      dateOuvrableCible,
-      tranches: [],
-      insufficientWindowCapacity: false,
-      warning: null
+      dateOuvrableCible, tranches: [],
+      insufficientWindowCapacity: false, warning: null
     };
   }
 
   const usedMap = computeScheduledCentimesByDate(operations, excludeOperationId);
-
-  // Collect all candidate working days inside [dateSaisie .. dateOuvrableCible]
   const businessDaysInWindow = [];
   let cursor = dateSaisie;
   let guard = 0;
   while (cursor <= dateOuvrableCible && guard < 400) {
-    if (isBusinessDay(cursor, holidays)) {
-      businessDaysInWindow.push(cursor);
-    }
+    if (isBusinessDay(cursor, holidays)) businessDaysInWindow.push(cursor);
     cursor = addCalendarDays(cursor, 1);
     guard++;
   }
@@ -99,13 +104,7 @@ export function simulateDistribution({
     businessDaysInWindow.push(dateOuvrableCible);
   }
 
-  let orderedCandidates = [];
-  if (mode === 'backward') {
-    orderedCandidates = [...businessDaysInWindow].reverse();
-  } else {
-    orderedCandidates = [...businessDaysInWindow];
-  }
-
+  const orderedCandidates = mode === 'backward' ? [...businessDaysInWindow].reverse() : [...businessDaysInWindow];
   let remainingCentimes = totalCentimes;
   const rawTranches = [];
 
@@ -117,39 +116,19 @@ export function simulateDistribution({
       const allocCentimes = Math.min(remainingCentimes, availableCentimes);
       usedMap[dayStr] = alreadyUsed + allocCentimes;
       remainingCentimes -= allocCentimes;
-
-      let reasonText = '';
-      if (dayStr === dateOuvrableCible) {
-        if (bruteCheck.reason) {
-          reasonText = `Échéance brute (${dateLimiteBrute}) fermée (${bruteCheck.reason}) → anticipée au jour ouvrable ${dayStr}.`;
-        } else {
-          reasonText = `Jour d'échéance cible ouvrable (${dayStr}).`;
-        }
-      } else if (mode === 'backward') {
-        reasonText = `Anticipé au ${dayStr} car le plafond journalier des jours ouvrables suivants jusqu'au ${dateOuvrableCible} est atteint.`;
-      } else {
-        reasonText = `Réparti sur le jour ouvrable disponible ${dayStr} (lissage avant l'échéance du ${dateOuvrableCible}).`;
-      }
-      if (alreadyUsed > 0) {
-        reasonText += ` (Déjà engagé ce jour : ${fromCentimes(alreadyUsed).toLocaleString('fr-FR')} DH).`;
-      }
-
       rawTranches.push({
         date: dayStr,
         montant: fromCentimes(allocCentimes),
         montantCentimes: allocCentimes,
         isOverflow: false,
         alreadyUsedBefore: fromCentimes(alreadyUsed),
-        remainingAfter: fromCentimes(plafondCentimes - (alreadyUsed + allocCentimes)),
-        explicationDate: reasonText
+        remainingAfter: fromCentimes(plafondCentimes - (alreadyUsed + allocCentimes))
       });
     }
   }
 
   let insufficientWindowCapacity = false;
   let warning = null;
-
-  // If window [dateSaisie .. dateOuvrableCible] could not absorb the full amount:
   if (remainingCentimes > 0) {
     insufficientWindowCapacity = true;
     let nextCursor = addCalendarDays(dateOuvrableCible, 1);
@@ -168,32 +147,26 @@ export function simulateDistribution({
             montantCentimes: allocCentimes,
             isOverflow: true,
             alreadyUsedBefore: fromCentimes(alreadyUsed),
-            remainingAfter: fromCentimes(plafondCentimes - (alreadyUsed + allocCentimes)),
-            explicationDate: `Reporté après l'échéance (${dateOuvrableCible}) au premier jour ouvrable disponible (${nextCursor}) car tous les jours ouvrables de la période étaient saturés au plafond.`
+            remainingAfter: fromCentimes(plafondCentimes - (alreadyUsed + allocCentimes))
           });
         }
       }
       nextCursor = addCalendarDays(nextCursor, 1);
       fGuard++;
     }
-    warning = `Capacité des jours ouvrables entre le ${dateSaisie} et le ${dateOuvrableCible} saturée : le reliquat a été reporté sur le(s) premier(s) jour(s) ouvrable(s) suivant(s) afin de ne jamais dépasser le plafond configuré.`;
+    warning = `Capacité des jours ouvrables saturée : le reliquat a été reporté sur le(s) premier(s) jour(s) ouvrable(s) suivant(s).`;
   }
 
-  // Sort chronologically
   rawTranches.sort((a, b) => a.date.localeCompare(b.date));
-
-  // Assign incremented cheque numbers & default status
   const finalTranches = rawTranches.map((tr, idx) => ({
     ...tr,
-    id: `chq_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+    id: `chq_${Date.now()}_${idx}`,
     numCheque: incrementChequeNumber(baseChequeNum, idx, rawTranches.length),
-    status: 'scheduled'
+    status: 'issued'
   }));
 
   return {
-    dateSaisie,
-    echeanceDays,
-    dateLimiteBrute,
+    dateSaisie, echeanceDays, dateLimiteBrute,
     nonWorkingReason: bruteCheck.reason,
     skippedDays: ant.skippedDays,
     dateOuvrableCible,

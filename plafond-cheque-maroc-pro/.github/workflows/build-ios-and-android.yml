@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Build Unsigned iOS IPA
+      - name: Build Unsigned iOS IPA with Camera, Photo & Local Notifications Permissions
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
@@ -22,12 +22,24 @@ jobs:
           {
             "appId": "ma.plafondcheque.pro",
             "appName": "PlafondCheque Pro",
-            "webDir": "public"
+            "webDir": "public",
+            "plugins": {
+              "LocalNotifications": {
+                "smallIcon": "ic_stat_icon_config_sample",
+                "iconColor": "#4F46E5"
+              }
+            }
           }
           EOF
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0
           rm -rf ios
           npx cap add ios
+          PLIST="ios/App/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'PlafondCheque Maroc Pro utilise la camera pour photographier et archiver vos cheques.'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'PlafondCheque Maroc Pro utilise la camera pour photographier et archiver vos cheques.'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'PlafondCheque Maroc Pro accede a votre galerie pour joindre les photos de vos cheques.'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'PlafondCheque Maroc Pro accede a votre galerie pour joindre les photos de vos cheques.'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'PlafondCheque Maroc Pro enregistre les photos et bordereaux de cheques sur votre appareil.'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'PlafondCheque Maroc Pro enregistre les photos et bordereaux de cheques sur votre appareil.'" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string 'remote-notification'" "$PLIST" || true
           npx cap sync ios
           cd ios/App
           if [ -d "App.xcworkspace" ]; then
@@ -56,7 +68,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - name: Build Android APK
+      - name: Build Android APK with Camera, Local Notifications & Exact Alarm Permissions
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
@@ -65,16 +77,24 @@ jobs:
           {
             "appId": "ma.plafondcheque.pro",
             "appName": "PlafondCheque Pro",
-            "webDir": "public"
+            "webDir": "public",
+            "plugins": {
+              "LocalNotifications": {
+                "smallIcon": "ic_stat_icon_config_sample",
+                "iconColor": "#4F46E5"
+              }
+            }
           }
           EOF
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
           rm -rf android
           npx cap add android
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          sed -i 's|<application|<uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <application|' "$MANIFEST"
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug -Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.internal.http.connectionTimeout=120000 || ./gradlew assembleDebug -Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android.apk"
       - uses: actions/upload-artifact@v4
         with:
