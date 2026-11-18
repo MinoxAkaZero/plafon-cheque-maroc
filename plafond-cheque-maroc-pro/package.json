@@ -1,6 +1,6 @@
 {
   "name": "plafond-cheque-maroc-pro",
-  "version": "9.0.0",
+  "version": "11.0.0",
   "private": true,
   "type": "module",
   "description": "Application professionnelle de gestion des chèques, LCN, plafonds journaliers et notifications système au Maroc (iOS, Android & PWA)",

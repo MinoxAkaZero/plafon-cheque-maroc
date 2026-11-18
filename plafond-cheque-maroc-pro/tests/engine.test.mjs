@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import {
+  APP_VERSION,
+  DB_SCHEMA_VERSION,
+  BACKUP_FORMAT_VERSION,
   isBusinessDay,
+  isValidYMD,
+  parseYMD,
+  getMoroccanTodayYMD,
+  generateMoroccanHolidaysForYear,
   getNonWorkingDayReason,
   getAnticipatedBusinessDay
 } from '../src/engine/calendar.mjs';
@@ -12,24 +19,41 @@ import {
 import {
   simulateDistribution,
   detectDuplicateCheque,
+  computeScheduledCentimesByDate,
+  findNextAvailableBusinessDayForAmount,
+  validateChequeInput,
   toCentimes,
   fromCentimes
 } from '../src/engine/distribution.mjs';
 import {
+  PBKDF2_DEFAULT_ITERATIONS,
   generateSaltHex,
+  generateRandomDekBytes,
+  constantTimeEqualStrings,
+  validateEncryptionEnvelope,
   derivePinKeyPBKDF2,
   verifyPinPBKDF2,
+  wrapDekWithSecret,
+  unwrapDekWithSecret,
+  encryptVaultWithDek,
+  decryptVaultWithDek,
   encryptBackupAESGCM,
   decryptBackupAESGCM,
-  computeSHA256Hex
+  computeSHA256Hex,
+  validateAndPrepareBackupRestore
 } from '../src/security/crypto.mjs';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   computeNotificationIdInt,
   adjustReminderDateToWorkingDay,
   buildLocalizedNotificationCopy,
-  buildNotificationPlan
+  buildNotificationPlan,
+  pruneStaleSentNotificationsRegistry
 } from '../src/notifications/notifier.mjs';
+import {
+  selectAuthoritativeStateSnapshot,
+  migrateLegacyStateSnapshot
+} from '../src/persistence/storage.mjs';
 
 let passed = 0;
 async function runTest(name, fn) {
@@ -388,7 +412,294 @@ async function main() {
     assert.ok(enCopy.title.includes('Daily Ceiling Reached (100%)'));
   });
 
-  console.log(`\n🎉 ALL ${passed}/30 PRODUCTION FINANCIAL, SECURITY & SYSTEM NOTIFICATION TESTS PASSED!`);
+  
+  // =========================================================================
+  // V11.0 FULL TECHNICAL AUDIT, SECURITY, PERSISTENCE & ENGINE TESTS (31–50)
+  // =========================================================================
+
+  await runTest('31. Unified PBKDF2-SHA256 (210,000 iterations) & Case-Sensitive Alphanumeric Passphrases', async () => {
+    assert.equal(PBKDF2_DEFAULT_ITERATIONS, 210000);
+    const salt = generateSaltHex(16);
+    const token = await derivePinKeyPBKDF2('Atlas#2026', salt);
+    assert.ok(token.startsWith('pbkdf2_sha256$210000$'));
+    assert.equal(await verifyPinPBKDF2('Atlas#2026', token), true);
+    assert.equal(await verifyPinPBKDF2('atlas#2026', token), false);
+    assert.equal(await verifyPinPBKDF2('Wrong#2026', token), false);
+  });
+
+  await runTest('32. Backward Compatibility for Legacy 100,000-Iteration & Uppercase-Normalized PIN/Recovery Tokens', async () => {
+    const salt = generateSaltHex(16);
+    const legacyUpperToken = await derivePinKeyPBKDF2('ma-1234-abcd', salt, 100000, true);
+    assert.ok(legacyUpperToken.startsWith('pbkdf2_sha256$100000$'));
+    assert.equal(await verifyPinPBKDF2('ma-1234-abcd', legacyUpperToken), true);
+    assert.equal(await verifyPinPBKDF2('MA-1234-ABCD', legacyUpperToken), true);
+  });
+
+  await runTest('33. Encryption Metadata Validation Rejects Custom Ciphers, Malformed IVs/Salts, and DoS Iterations', () => {
+    assert.throws(() => validateEncryptionEnvelope({ cipher: 'XOR-HMAC', iv: '00'.repeat(12), ciphertext: 'AAAA'.repeat(10) }), /AES-256-GCM requis/);
+    assert.throws(() => validateEncryptionEnvelope({ cipher: 'AES-256-GCM', kdf: 'MD5', iv: '00'.repeat(12), ciphertext: 'AAAA'.repeat(10) }), /PBKDF2-SHA256 requis/);
+    assert.throws(() => validateEncryptionEnvelope({ cipher: 'AES-256-GCM', iterations: 500, iv: '00'.repeat(12), ciphertext: 'AAAA'.repeat(10) }), /hors limites/);
+    assert.throws(() => validateEncryptionEnvelope({ cipher: 'AES-256-GCM', iterations: 99999999, iv: '00'.repeat(12), ciphertext: 'AAAA'.repeat(10) }), /hors limites/);
+    assert.throws(() => validateEncryptionEnvelope({ cipher: 'AES-256-GCM', iv: '1234', ciphertext: 'AAAA'.repeat(10) }), /IV/);
+  });
+
+  await runTest('34. 256-Bit DEK Envelope Wrapping & Unwrapping with PIN and Recovery Key (AES-256-GCM + PBKDF2 210k)', async () => {
+    const dek = generateRandomDekBytes();
+    assert.equal(dek.byteLength, 32);
+    const wrappedByPin = await wrapDekWithSecret(dek, '258096');
+    const wrappedByRec = await wrapDekWithSecret(dek, 'MA-9988-7766-5544');
+    const unwrappedFromPin = await unwrapDekWithSecret(wrappedByPin, '258096');
+    const unwrappedFromRec = await unwrapDekWithSecret(wrappedByRec, 'MA-9988-7766-5544');
+    assert.deepEqual(unwrappedFromPin, dek);
+    assert.deepEqual(unwrappedFromRec, dek);
+  });
+
+  await runTest('35. Wrong PIN or Tampered Wrapped Key Fails DEK Unwrapping Safely', async () => {
+    const dek = generateRandomDekBytes();
+    const wrapped = await wrapDekWithSecret(dek, 'CorrectPass#1');
+    await assert.rejects(async () => unwrapDekWithSecret(wrapped, 'WrongPass#2'));
+    const tampered = { ...wrapped, iv: 'ff'.repeat(12) };
+    await assert.rejects(async () => unwrapDekWithSecret(tampered, 'CorrectPass#1'));
+  });
+
+  await runTest('36. Financial Vault Encryption at Rest (AES-256-GCM) & Tamper Rejection', async () => {
+    const dek = generateRandomDekBytes();
+    const vaultData = {
+      plafondJournalier: 15000000,
+      companyName: 'Société Atlas Méditerranée SARL',
+      operations: [{ id: 'op_v1', beneficiaire: 'Ciments du Maroc', montantTotal: 4500000, tranches: [] }]
+    };
+    const encVault = await encryptVaultWithDek(vaultData, dek);
+    assert.equal(encVault.encryptedAtRest, true);
+    assert.equal(encVault.cipher, 'AES-256-GCM');
+    assert.equal(JSON.stringify(encVault).includes('Ciments du Maroc'), false);
+    const decVault = await decryptVaultWithDek(encVault, dek);
+    assert.deepEqual(decVault, vaultData);
+    const wrongDek = generateRandomDekBytes();
+    await assert.rejects(async () => decryptVaultWithDek(encVault, wrongDek));
+  });
+
+  await runTest('37. Cross-Version Encrypted Backup Compatibility (v8/v9 100k iterations & v11 210k iterations)', async () => {
+    const payload = { plafondJournalier: 10000000, companyName: 'Sté Koutoubia SARL', operations: [] };
+    const enc100k = await encryptBackupAESGCM(payload, 'Pass100k', 100000);
+    const enc210k = await encryptBackupAESGCM(payload, 'Pass210k', 210000);
+    assert.equal(enc100k.iterations, 100000);
+    assert.equal(enc210k.iterations, 210000);
+    assert.deepEqual(await decryptBackupAESGCM(enc100k, 'Pass100k'), payload);
+    assert.deepEqual(await decryptBackupAESGCM(enc210k, 'Pass210k'), payload);
+  });
+
+  await runTest('38. 7-Step Backup Validation Rejects Malformed JSON, Tampered SHA-256, and Invalid Cheque Amounts/Dates', async () => {
+    await assert.rejects(async () => validateAndPrepareBackupRestore('{corrupted json'), /JSON corrompu/);
+    const core = { plafondJournalier: 10000000, companyName: 'Test', holidays: [], operations: [] };
+    const validHash = await computeSHA256Hex(JSON.stringify(core));
+    const tamperedBackup = { ...core, plafondJournalier: 99000000, integrityHash: validHash };
+    await assert.rejects(async () => validateAndPrepareBackupRestore(tamperedBackup), /SHA-256/);
+    const badOpBackup = {
+      plafondJournalier: 10000000,
+      operations: [{ id: 'op1', tranches: [{ numCheque: 'CHQ-1', montant: -500, date: '2026-11-16' }] }]
+    };
+    await assert.rejects(async () => validateAndPrepareBackupRestore(badOpBackup), /invalide/);
+  });
+
+  await runTest('39. Safe Backup Restoration Preserves Company Name, Ceiling, Holidays, Settings, and Cheque Photos', async () => {
+    const rawBackup = {
+      version: '8.0.0',
+      plafondJournalier: 12000000,
+      companyName: 'Groupe Industriel Casablanca SA',
+      language: 'ar',
+      lwalidMode: true,
+      operations: [{
+        id: 'op_rest_1',
+        beneficiaire: 'Fournisseur Nord',
+        banque: 'CIH Bank',
+        montantTotal: 3500000,
+        dateSaisie: '2026-11-16',
+        photoDataUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
+        tranches: [{ id: 'tr_1', numCheque: 'CIH-900', montant: 3500000, date: '2026-11-23', status: 'scheduled' }]
+      }]
+    };
+    const validated = await validateAndPrepareBackupRestore(rawBackup);
+    assert.equal(validated.valid, true);
+    assert.equal(validated.companyName, 'Groupe Industriel Casablanca SA');
+    assert.equal(validated.plafondJournalier, 12000000);
+    assert.equal(validated.language, 'ar');
+    assert.equal(validated.lwalidMode, true);
+    assert.equal(validated.operations[0].tranches[0].photoDataUrl, 'data:image/jpeg;base64,/9j/4AAQSkZJRg==');
+  });
+
+  await runTest('40. Split-Brain Persistence Conflict Resolution (IndexedDB vs localStorage Revision & Timestamp)', () => {
+    const staleIdb = { revision: 4, updatedAt: '2026-11-16T10:00:00.000Z', encryptedVault: { ciphertext: 'old' } };
+    const newerLs = { revision: 5, updatedAt: '2026-11-16T10:05:00.000Z', encryptedVault: { ciphertext: 'new' } };
+    const res1 = selectAuthoritativeStateSnapshot(staleIdb, newerLs);
+    assert.equal(res1.chosen.encryptedVault.ciphertext, 'new');
+    assert.equal(res1.needsSyncToIdb, true);
+
+    const newerIdb = { revision: 8, updatedAt: '2026-11-16T12:00:00.000Z', encryptedVault: { ciphertext: 'idb_latest' } };
+    const res2 = selectAuthoritativeStateSnapshot(newerIdb, newerLs);
+    assert.equal(res2.chosen.encryptedVault.ciphertext, 'idb_latest');
+    assert.equal(res2.needsSyncToLs, true);
+  });
+
+  await runTest('41. Legacy Database Migration Preserves Operations & Clears Weak Non-PBKDF2 PIN Hashes', () => {
+    const legacyRecord = {
+      plafondJournalier: 15000000,
+      companyName: 'Négoce Fès SARL',
+      pinHash: 'legacy_weak_hash_12345',
+      operations: [{
+        id: 'op_old_1',
+        beneficiaire: 'Sté Sud',
+        montantTotal: 2000000,
+        photoDataUrl: 'data:image/jpeg;base64,AAAA',
+        tranches: [{ numCheque: 'AWB-10', montant: 2000000, date: '2026-11-20' }]
+      }]
+    };
+    const migrated = migrateLegacyStateSnapshot(legacyRecord);
+    assert.equal(migrated.schemaVersion, 4);
+    assert.equal(migrated.companyName, 'Négoce Fès SARL');
+    assert.equal(migrated.pinHash, '');
+    assert.equal(migrated.legacyPinClearedForMigration, true);
+    assert.equal(migrated.operations[0].photoId, 'photo_op_old_1');
+  });
+
+  await runTest('42. No Hardcoded 2026-11-07 Date in parseYMD: Invalid Dates Fall Back to Dynamic Moroccan Today', () => {
+    const todayYMD = getMoroccanTodayYMD();
+    assert.match(todayYMD, /^\d{4}-\d{2}-\d{2}$/);
+    const fallbackDate = parseYMD('invalid-date');
+    const fy = fallbackDate.getFullYear();
+    const fm = String(fallbackDate.getMonth() + 1).padStart(2, '0');
+    const fd = String(fallbackDate.getDate()).padStart(2, '0');
+    assert.equal(`${fy}-${fm}-${fd}`, todayYMD);
+  });
+
+  await runTest('43. Strict Calendar Date Validation (Leap Years & Out-of-Range Days)', () => {
+    assert.equal(isValidYMD('2028-02-29'), true);
+    assert.equal(isValidYMD('2026-02-29'), false);
+    assert.equal(isValidYMD('2026-13-01'), false);
+    assert.equal(isValidYMD('2026-04-31'), false);
+    assert.equal(isValidYMD('2026-11-16'), true);
+  });
+
+  await runTest('44. Dynamic Moroccan Holiday Generator for Future Years (2028, 2029, 2030) with Estimated Religious Flags', () => {
+    for (const yr of [2028, 2029, 2030]) {
+      const hols = generateMoroccanHolidaysForYear(yr);
+      assert.ok(hols.length >= 14, `Expected >= 14 holidays for ${yr}, got ${hols.length}`);
+      const nat = hols.filter(h => h.type === 'national' && h.estimated === false);
+      const rel = hols.filter(h => h.type === 'religious' && h.estimated === true);
+      assert.equal(nat.length, 10, `Expected 10 fixed national holidays in ${yr}`);
+      assert.ok(rel.length >= 4, `Expected >= 4 estimated religious holidays in ${yr}`);
+      assert.ok(hols.some(h => h.date === `${yr}-11-18`));
+    }
+  });
+
+  await runTest('45. Expired and Cancelled Cheques Excluded from Daily Ceiling Consumption', () => {
+    const ops = [{
+      id: 'op_exp',
+      tranches: [
+        { date: '2026-11-23', montant: 6000000, status: 'expired' },
+        { date: '2026-11-23', montant: 3000000, status: 'cancelled' },
+        { date: '2026-11-23', montant: 2500000, status: 'scheduled' }
+      ]
+    }];
+    const map = computeScheduledCentimesByDate(ops);
+    assert.equal(fromCentimes(map['2026-11-23']), 2500000);
+  });
+
+  await runTest('46. findNextAvailableBusinessDayForAmount Skips Saturated Days, Weekends & Moroccan Holidays', () => {
+    const ops = [{
+      id: 'op_full',
+      tranches: [
+        { date: '2026-11-16', montant: 10000000, status: 'scheduled' },
+        { date: '2026-11-17', montant: 9000000, status: 'scheduled' }
+      ]
+    }];
+    // Nov 16 is full (10M), Nov 17 only has 1M left (needs 2M), Nov 18 is Fête de l'Indépendance (holiday) -> Next open is Nov 19!
+    const nextDay = findNextAvailableBusinessDayForAmount({
+      startYMD: '2026-11-16',
+      amountDH: 2000000,
+      operations: ops,
+      plafondJournalier: 10000000
+    });
+    assert.equal(nextDay, '2026-11-19');
+  });
+
+  await runTest('47. Input Validation Rejects Zero/Negative Amounts, Missing Dates, and Empty Beneficiaries', () => {
+    assert.equal(validateChequeInput({ montant: 0, dateSaisie: '2026-11-16', beneficiaire: 'Atlas' }).valid, false);
+    assert.equal(validateChequeInput({ montant: -100, dateSaisie: '2026-11-16', beneficiaire: 'Atlas' }).valid, false);
+    assert.equal(validateChequeInput({ montant: 5000, dateSaisie: 'bad-date', beneficiaire: 'Atlas' }).valid, false);
+    assert.equal(validateChequeInput({ montant: 5000, dateSaisie: '2026-11-16', beneficiaire: '   ' }).valid, false);
+    assert.equal(validateChequeInput({ montant: 5000, dateSaisie: '2026-11-16', beneficiaire: 'Atlas' }).valid, true);
+  });
+
+  await runTest('48. Duplicate Cheque Detection Supports Single-Tranche Exclusion During Edit', () => {
+    const ops = [{
+      id: 'op_edit_dup',
+      beneficiaire: 'Fournisseur Z',
+      montantTotal: 4000000,
+      dateSaisie: '2026-11-16',
+      tranches: [
+        { numCheque: 'BMCE-1001', montant: 2000000, date: '2026-11-23', status: 'scheduled' },
+        { numCheque: 'BMCE-1002', montant: 2000000, date: '2026-11-24', status: 'scheduled' }
+      ]
+    }];
+    // Editing tranche 0 while keeping its own number 'BMCE-1001' must NOT flag a self-duplicate
+    const selfCheck = detectDuplicateCheque(ops, {
+      numCheque: 'BMCE-1001',
+      beneficiaire: 'Fournisseur Z',
+      montant: 2000000,
+      dateSaisie: '2026-11-16',
+      excludeTrancheLocator: { opId: 'op_edit_dup', trIdx: 0 }
+    });
+    assert.equal(selfCheck.isDuplicate, false);
+    // Changing tranche 0's number to tranche 1's number 'BMCE-1002' MUST flag a duplicate
+    const collisionCheck = detectDuplicateCheque(ops, {
+      numCheque: 'BMCE-1002',
+      beneficiaire: 'Fournisseur Z',
+      montant: 2000000,
+      dateSaisie: '2026-11-16',
+      excludeTrancheLocator: { opId: 'op_edit_dup', trIdx: 0 }
+    });
+    assert.equal(collisionCheck.isDuplicate, true);
+  });
+
+  await runTest('49. Notification Engine Excludes Expired Cheques from 80% and 100% Ceiling Alerts', () => {
+    const ops = [{
+      id: 'op_exp_notif',
+      beneficiaire: 'Sté Sud',
+      banque: 'BCP',
+      dateSaisie: '2026-11-10',
+      tranches: [
+        { id: 'tr_exp', numCheque: 'BCP-88', montant: 9500000, date: '2026-11-20', status: 'expired' }
+      ]
+    }];
+    const plan = buildNotificationPlan({
+      operations: ops,
+      plafondJournalier: 10000000,
+      settings: { ...DEFAULT_NOTIFICATION_SETTINGS, enabled: true, permissionStatus: 'granted' },
+      referenceDateYMD: '2026-11-16'
+    });
+    assert.equal(plan.notificationsToSchedule.length, 0);
+  });
+
+  await runTest('50. pruneStaleSentNotificationsRegistry Cleans Up Deleted, Cancelled, and Rescheduled Cheques', () => {
+    const ops = [{
+      id: 'op_active',
+      tranches: [{ id: 'tr_active', numCheque: 'AWB-1', montant: 8500000, date: '2026-11-20', status: 'scheduled' }]
+    }];
+    const dirtyRegistry = {
+      'cheque_j3_op_active_tr_active_2026-11-20': '2026-11-16T09:00:00Z',
+      'cheque_j3_op_deleted_tr_1_2026-11-19': '2026-11-16T09:00:00Z',
+      'ceiling_80_2026-11-20_1000000000': '2026-11-16T09:00:00Z',
+      'ceiling_80_2026-11-19_1000000000': '2026-11-16T09:00:00Z'
+    };
+    const cleaned = pruneStaleSentNotificationsRegistry(dirtyRegistry, ops, 10000000);
+    assert.deepEqual(Object.keys(cleaned).sort(), [
+      'ceiling_80_2026-11-20_1000000000',
+      'cheque_j3_op_active_tr_active_2026-11-20'
+    ]);
+  });
+
+  console.log(`\n🎉 ALL ${passed}/50 PRODUCTION FINANCIAL, SECURITY, PERSISTENCE & SYSTEM NOTIFICATION TESTS PASSED!`);
 }
 
 main();

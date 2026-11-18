@@ -24,7 +24,8 @@
 import {
   DEFAULT_MOROCCAN_HOLIDAYS,
   addCalendarDays,
-  getNonWorkingDayReason
+  getNonWorkingDayReason,
+  getMoroccanTodayYMD
 } from '../engine/calendar.mjs';
 import { toCentimes, fromCentimes } from '../engine/distribution.mjs';
 
@@ -78,7 +79,7 @@ export function adjustReminderDateToWorkingDay(ymdStr, minFloorDateStr, holidays
  * Combines a YYYY-MM-DD date string and HH:MM time string into an ISO timestamp / Date object.
  */
 export function combineDateAndTime(ymdStr, timeHHMM = '09:00') {
-  const [y, m, d] = String(ymdStr || '2026-11-12').split('-').map(Number);
+  const [y, m, d] = String(ymdStr || getMoroccanTodayYMD()).split('-').map(Number);
   const [hh, mm] = String(timeHHMM || '09:00').split(':').map(Number);
   return new Date(y, (m || 1) - 1, d || 1, isNaN(hh) ? 9 : hh, isNaN(mm) ? 0 : mm, 0, 0);
 }
@@ -281,7 +282,7 @@ export function buildNotificationPlan({
   holidays = DEFAULT_MOROCCAN_HOLIDAYS,
   settings = DEFAULT_NOTIFICATION_SETTINGS,
   sentRegistry = {},
-  referenceDateYMD = '2026-11-12',
+  referenceDateYMD = getMoroccanTodayYMD(),
   lang = 'fr'
 }) {
   const cfg = { ...DEFAULT_NOTIFICATION_SETTINGS, ...(settings || {}) };
@@ -304,7 +305,7 @@ export function buildNotificationPlan({
       const tr = op.tranches[idx];
       if (!tr || !tr.date) continue;
       const st = String(tr.status || 'scheduled').toLowerCase();
-      if (st === 'cancelled' || st === 'annule') continue;
+      if (st === 'cancelled' || st === 'annule' || st === 'expired' || st === 'expire') continue;
 
       const c = toCentimes(tr.montant);
       mapByDateCentimes[tr.date] = (mapByDateCentimes[tr.date] || 0) + c;
@@ -486,4 +487,39 @@ export function buildNotificationPlan({
     immediateAlerts,
     skippedDeduplicatedCount
   };
+}
+
+
+/**
+ * Prunes sentNotificationsRegistry entries that belong to deleted, cancelled, or rescheduled cheques
+ * so edited or restored cheques always trigger accurate reminders on their new dates.
+ */
+export function pruneStaleSentNotificationsRegistry(sentRegistry = {}, operations = [], plafondJournalier = 10000000) {
+  const validPrefixes = new Set();
+  const plafondCentimes = toCentimes(plafondJournalier);
+  const activeDates = new Set();
+  for (const op of (operations || [])) {
+    if (!op || !Array.isArray(op.tranches)) continue;
+    for (let idx = 0; idx < op.tranches.length; idx++) {
+      const tr = op.tranches[idx];
+      if (!tr || !tr.date) continue;
+      const st = String(tr.status || 'scheduled').toLowerCase();
+      if (st === 'cancelled' || st === 'annule' || st === 'expired' || st === 'expire') continue;
+      activeDates.add(tr.date);
+      const trancheId = tr.id || `${op.id}_tr_${idx}`;
+      validPrefixes.add(`overdue_${op.id}_${trancheId}_${tr.date}`);
+      validPrefixes.add(`cheque_j3_${op.id}_${trancheId}_${tr.date}`);
+      validPrefixes.add(`cheque_j1_${op.id}_${trancheId}_${tr.date}`);
+      validPrefixes.add(`cheque_j0_${op.id}_${trancheId}_${tr.date}`);
+    }
+  }
+  for (const dStr of activeDates) {
+    validPrefixes.add(`ceiling_80_${dStr}_${plafondCentimes}`);
+    validPrefixes.add(`ceiling_100_${dStr}_${plafondCentimes}`);
+  }
+  const cleaned = {};
+  for (const [k, v] of Object.entries(sentRegistry || {})) {
+    if (validPrefixes.has(k)) cleaned[k] = v;
+  }
+  return cleaned;
 }

@@ -1,5 +1,14 @@
-const CACHE_NAME = 'plafond-cheque-maroc-pro-v10.1.0';
-const ASSETS_TO_CACHE = ['./', './index.html', './gestion_cheques_maroc.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
+const APP_VERSION = '11.0.0';
+const CACHE_NAME = 'plafond-cheque-maroc-pro-v11.0.0';
+const ASSETS_TO_CACHE = [
+  './',
+  './index.html',
+  './gestion_cheques_maroc.html',
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png'
+];
 const SW_DB_NAME = 'PlafondChequeSWNotifDB';
 const SW_STORE_NAME = 'scheduled_queue';
 
@@ -20,12 +29,16 @@ function openSWNotifDB() {
 async function saveQueueToSWDB(items) {
   try {
     const db = await openSWNotifDB();
-    const tx = db.transaction(SW_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(SW_STORE_NAME);
-    store.clear();
-    for (const item of (items || [])) {
-      store.put(item);
-    }
+    await new Promise((resolve) => {
+      const tx = db.transaction(SW_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(SW_STORE_NAME);
+      store.clear();
+      for (const item of (items || [])) {
+        store.put(item);
+      }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
     db.close();
   } catch (e) {}
 }
@@ -54,22 +67,12 @@ async function checkAndFireDueSWNotifications() {
           data: item.extra || {}
         });
         item.fired = true;
-        const txW = db.transaction(SW_STORE_NAME, 'readwrite');
-        txW.objectStore(SW_STORE_NAME).put(item);
-      } else if ('showTrigger' in Notification.prototype && typeof TimestampTrigger !== 'undefined' && !item.triggerScheduled) {
-        try {
-          await self.registration.showNotification(item.title, {
-            body: item.body,
-            icon: './icons/icon-192.png',
-            badge: './icons/icon-192.png',
-            tag: item.eventKey,
-            data: item.extra || {},
-            showTrigger: new TimestampTrigger(schedMs)
-          });
-          item.triggerScheduled = true;
-          const txT = db.transaction(SW_STORE_NAME, 'readwrite');
-          txT.objectStore(SW_STORE_NAME).put(item);
-        } catch (err) {}
+        await new Promise((resolve) => {
+          const txW = db.transaction(SW_STORE_NAME, 'readwrite');
+          txW.objectStore(SW_STORE_NAME).put(item);
+          txW.oncomplete = () => resolve(true);
+          txW.onerror = () => resolve(false);
+        });
       }
     }
     db.close();
@@ -89,7 +92,8 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k))))
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k))))
       .then(() => checkAndFireDueSWNotifications())
   );
   self.clients.claim();
@@ -114,6 +118,8 @@ self.addEventListener('message', (event) => {
         data: n.extra || {}
       })
     );
+  } else if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
 
@@ -159,17 +165,45 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// Network-First with Offline Cache Fallback for HTML/JS navigation so users always receive updates immediately when online,
+// and Stale-While-Revalidate for static icons/images.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const reqUrl = new URL(event.request.url);
+  const isHTMLOrJS = event.request.mode === 'navigate' ||
+                     reqUrl.pathname.endsWith('.html') ||
+                     reqUrl.pathname.endsWith('.js') ||
+                     reqUrl.pathname.endsWith('.mjs') ||
+                     reqUrl.pathname.endsWith('.json') ||
+                     reqUrl.pathname === '/' ||
+                     reqUrl.pathname.endsWith('/');
+
+  if (isHTMLOrJS) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      const net = fetch(event.request).then((res) => {
-        if (res && res.status === 200) {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
-        }
-        return res;
-      }).catch(() => cached);
+      const net = fetch(event.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
+          }
+          return res;
+        })
+        .catch(() => cached);
       return cached || net;
     })
   );

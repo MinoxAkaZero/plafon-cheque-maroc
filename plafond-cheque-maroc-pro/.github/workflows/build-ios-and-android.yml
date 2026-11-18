@@ -1,63 +1,38 @@
-name: Build iOS IPA and Android APK
+name: PlafondChèque Maroc Pro — CI Tests, Debug Builds & Signed Production Releases (v11.0.0)
 on:
   push:
     branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'Build Mode (debug-testing or production-release)'
+        required: false
+        default: 'debug-testing'
+        type: choice
+        options:
+          - debug-testing
+          - production-release
 
 jobs:
-  build-ios:
-    name: Build iOS IPA
-    runs-on: macos-14
+  automated-tests:
+    name: 1. Automated Unit & Integration Tests
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Build Unsigned iOS IPA with Camera, Photo & Local Notifications Permissions
+      - name: Run Engine, Cryptographic, Persistence & Notification Test Suite
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          rm -f capacitor.config.ts
-          cat << 'EOF' > capacitor.config.json
-          {
-            "appId": "ma.plafondcheque.pro",
-            "appName": "PlafondCheque Pro",
-            "webDir": "public",
-            "plugins": {
-              "LocalNotifications": {
-                "smallIcon": "ic_stat_icon_config_sample",
-                "iconColor": "#4F46E5"
-              }
-            }
-          }
-          EOF
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0
-          rm -rf ios
-          npx cap add ios
-          PLIST="ios/App/App/Info.plist"
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'PlafondCheque Maroc Pro utilise la camera pour photographier et archiver vos cheques.'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'PlafondCheque Maroc Pro utilise la camera pour photographier et archiver vos cheques.'" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'PlafondCheque Maroc Pro accede a votre galerie pour joindre les photos de vos cheques.'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'PlafondCheque Maroc Pro accede a votre galerie pour joindre les photos de vos cheques.'" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'PlafondCheque Maroc Pro enregistre les photos et bordereaux de cheques sur votre appareil.'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'PlafondCheque Maroc Pro enregistre les photos et bordereaux de cheques sur votre appareil.'" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string 'remote-notification'" "$PLIST" || true
-          npx cap sync ios
-          cd ios/App
-          if [ -d "App.xcworkspace" ]; then
-            xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
-          else
-            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
-          fi
-          mkdir -p "$GITHUB_WORKSPACE/Payload"
-          cp -r build/Build/Products/Release-iphoneos/App.app "$GITHUB_WORKSPACE/Payload/"
-          cd "$GITHUB_WORKSPACE"
-          zip -r PlafondCheque-Maroc-Pro-iOS.ipa Payload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: PlafondCheque-Maroc-Pro-iOS-IPA
-          path: PlafondCheque-Maroc-Pro-iOS.ipa
+          npm test
 
-  build-android:
-    name: Build Android APK
+  android-debug-testing:
+    name: 2. Android Debug / Testing Build (APK)
+    needs: automated-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,35 +43,124 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - name: Build Android APK with Camera, Local Notifications & Exact Alarm Permissions
+      - name: Non-Destructive Capacitor Sync & Debug APK Build
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          rm -f capacitor.config.ts
-          cat << 'EOF' > capacitor.config.json
-          {
-            "appId": "ma.plafondcheque.pro",
-            "appName": "PlafondCheque Pro",
-            "webDir": "public",
-            "plugins": {
-              "LocalNotifications": {
-                "smallIcon": "ic_stat_icon_config_sample",
-                "iconColor": "#4F46E5"
-              }
-            }
-          }
-          EOF
           npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
-          rm -rf android
-          npx cap add android
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's|<application|<uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n    <uses-permission android:name="android.permission.VIBRATE" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <application|' "$MANIFEST"
+          # Preserve existing custom AndroidManifest.xml and resources; only run cap add if android/build.gradle is absent
+          if [ ! -f "android/build.gradle" ]; then
+            cp -f android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.backup.xml 2>/dev/null || true
+            rm -rf android
+            npx cap add android
+            if [ -f "/tmp/AndroidManifest.backup.xml" ]; then
+              cp -f /tmp/AndroidManifest.backup.xml android/app/src/main/AndroidManifest.xml
+            fi
+          fi
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug -Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.internal.http.connectionTimeout=120000 || ./gradlew assembleDebug -Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000
-          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android.apk"
+          ./gradlew assembleDebug -Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.internal.http.connectionTimeout=120000
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android-Debug.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: PlafondCheque-Maroc-Pro-Android-APK
-          path: PlafondCheque-Maroc-Pro-Android.apk
+          name: PlafondCheque-Maroc-Pro-Android-Debug-APK
+          path: PlafondCheque-Maroc-Pro-Android-Debug.apk
+
+  android-production-release:
+    name: 3. Android Signed Production Release (APK & AAB)
+    needs: automated-tests
+    if: github.event.inputs.release_mode == 'production-release' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Build Signed Production APK & Play Store AAB (if signing secrets configured)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
+          cd "$PKG_DIR"
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
+          if [ ! -f "android/build.gradle" ]; then
+            cp -f android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.backup.xml 2>/dev/null || true
+            rm -rf android
+            npx cap add android
+            if [ -f "/tmp/AndroidManifest.backup.xml" ]; then
+              cp -f /tmp/AndroidManifest.backup.xml android/app/src/main/AndroidManifest.xml
+            fi
+          fi
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/release-keystore.jks
+            ./gradlew assembleRelease bundleRelease \
+              -Pandroid.injected.signing.store.file=/tmp/release-keystore.jks \
+              -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+              -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+              -Pandroid.injected.signing.key.password="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+            rm -f /tmp/release-keystore.jks
+            cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android-Signed-Release.apk" || true
+            cp app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android-PlayStore.aab" || true
+          else
+            echo "Notice: ANDROID_KEYSTORE_BASE64 secret not configured. Skipping signed production bundle; use android-debug-testing artifact or configure GitHub Repository Secrets."
+          fi
+
+  ios-build-and-archive:
+    name: 4. iOS Testing & Signed App Store Archive
+    needs: automated-tests
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Non-Destructive Capacitor Sync & iOS Build
+        env:
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
+          cd "$PKG_DIR"
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0
+          # Preserve existing custom Info.plist, PrivacyInfo.xcprivacy, and Assets.xcassets
+          if [ ! -d "ios/App/App.xcodeproj" ]; then
+            cp -rf ios /tmp/ios_custom_backup 2>/dev/null || true
+            rm -rf ios
+            npx cap add ios
+            if [ -d "/tmp/ios_custom_backup/App/App" ]; then
+              cp -f /tmp/ios_custom_backup/App/App/Info.plist ios/App/App/Info.plist 2>/dev/null || true
+              cp -f /tmp/ios_custom_backup/App/App/PrivacyInfo.xcprivacy ios/App/App/PrivacyInfo.xcprivacy 2>/dev/null || true
+              cp -rf /tmp/ios_custom_backup/App/App/Assets.xcassets/* ios/App/App/Assets.xcassets/ 2>/dev/null || true
+            fi
+          fi
+          npx cap sync ios
+          cd ios/App
+          if [ -n "$IOS_CERTIFICATE_P12_BASE64" ] && [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "Building Signed iOS Release Archive with Apple Developer Credentials..."
+            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -archivePath build/App.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" archive
+          else
+            echo "Building Unsigned iOS Testing Bundle (Configure IOS_CERTIFICATE_P12_BASE64, IOS_PROVISIONING_PROFILE_BASE64 & APPLE_TEAM_ID secrets for App Store Connect IPA signing)..."
+            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+            mkdir -p "$GITHUB_WORKSPACE/Payload"
+            cp -r build/Build/Products/Release-iphoneos/App.app "$GITHUB_WORKSPACE/Payload/"
+            cd "$GITHUB_WORKSPACE"
+            zip -r PlafondCheque-Maroc-Pro-iOS-Testing-Unsigned.ipa Payload
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PlafondCheque-Maroc-Pro-iOS-Testing-Bundle
+          path: PlafondCheque-Maroc-Pro-iOS-Testing-Unsigned.ipa
