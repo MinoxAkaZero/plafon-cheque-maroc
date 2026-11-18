@@ -65,7 +65,7 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0 capacitor-secure-storage-plugin@0.9.0
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
           if [ ! -f "android/build.gradle" ]; then
             cp -rf android /tmp/android_custom_backup 2>/dev/null || true
             rm -rf android
@@ -107,7 +107,7 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0 capacitor-secure-storage-plugin@0.9.0
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
           if [ ! -f "android/build.gradle" ]; then
             cp -rf android /tmp/android_custom_backup 2>/dev/null || true
             rm -rf android
@@ -151,7 +151,7 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0 capacitor-secure-storage-plugin@0.9.0
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0
           if [ ! -d "ios/App/App.xcodeproj" ]; then
             cp -rf ios /tmp/ios_custom_backup 2>/dev/null || true
             rm -rf ios
