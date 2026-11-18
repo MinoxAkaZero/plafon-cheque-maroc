@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import {
   APP_VERSION,
@@ -699,7 +702,71 @@ async function main() {
     ]);
   });
 
-  console.log(`\n🎉 ALL ${passed}/50 PRODUCTION FINANCIAL, SECURITY, PERSISTENCE & SYSTEM NOTIFICATION TESTS PASSED!`);
+  
+  // =========================================================================
+  // V11.0 SECOND-PASS PARITY, HIJRI, NATIVE KEYSTORE & CI WORKFLOW TESTS (51–55)
+  // =========================================================================
+
+  await runTest('51. Tabular Hijri Calendar Fallback & Multi-Year Religious Holiday Estimation Integrity', () => {
+    for (const yr of [2028, 2029, 2030, 2031, 2032]) {
+      const hols = generateMoroccanHolidaysForYear(yr);
+      const rel = hols.filter(h => h.type === 'religious');
+      assert.ok(rel.length >= 6, `Expected at least 6 religious holiday entries in ${yr}`);
+      assert.equal(rel.every(h => h.estimated === true), true, 'All future religious holidays must be marked estimated: true');
+    }
+  });
+
+  await runTest('52. Authoritative Parity Between Inline index.html Engine and Standalone src/engine Modules', () => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const htmlContent = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    // Verify that both index.html and src/engine use the exact same Tabular Hijri algorithm, isInactiveChequeStatus, and PBKDF2_ITERATIONS = 210000
+    assert.ok(htmlContent.includes('function gregorianToHijriTabular(gYear, gMonth, gDay)'), 'index.html must contain gregorianToHijriTabular');
+    assert.ok(htmlContent.includes('function isInactiveChequeStatus(status)'), 'index.html must contain unified isInactiveChequeStatus');
+    assert.ok(htmlContent.includes('const PBKDF2_ITERATIONS = 210000;'), 'index.html must enforce PBKDF2_ITERATIONS = 210000');
+    assert.ok(htmlContent.includes('function selectAuthoritativeStateSnapshot(idbRecord, lsRecord)'), 'index.html must contain selectAuthoritativeStateSnapshot');
+    assert.ok(htmlContent.includes('function renderSelectedCalendarDayPanel('), 'index.html must contain interactive calendar daily panel');
+  });
+
+  await runTest('53. Native Android Keystore (Java) & iOS Keychain (Swift) Capacitor Plugins Present and Registered', () => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const androidPluginPath = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'java', 'ma', 'plafondcheque', 'pro', 'SecureVaultKeystorePlugin.java');
+    const mainActivityPath = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'java', 'ma', 'plafondcheque', 'pro', 'MainActivity.java');
+    const iosPluginPath = path.join(__dirname, '..', 'ios', 'App', 'App', 'SecureVaultKeychainPlugin.swift');
+    assert.equal(fs.existsSync(androidPluginPath), true, 'SecureVaultKeystorePlugin.java missing');
+    assert.equal(fs.existsSync(mainActivityPath), true, 'MainActivity.java missing');
+    assert.equal(fs.existsSync(iosPluginPath), true, 'SecureVaultKeychainPlugin.swift missing');
+    assert.ok(fs.readFileSync(androidPluginPath, 'utf8').includes('AndroidKeyStore'));
+    assert.ok(fs.readFileSync(mainActivityPath, 'utf8').includes('registerPlugin(SecureVaultKeystorePlugin.class)'));
+    assert.ok(fs.readFileSync(iosPluginPath, 'utf8').includes('kSecAttrAccessibleWhenUnlockedThisDeviceOnly'));
+  });
+
+  await runTest('54. Byte-Exact Synchronization Across Root and public/ HTML, Manifest, and Service Worker Files', () => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const rootDir = path.join(__dirname, '..');
+    const idxRoot = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    const idxPub = fs.readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+    const gcmRoot = fs.readFileSync(path.join(rootDir, 'gestion_cheques_maroc.html'), 'utf8');
+    const gcmPub = fs.readFileSync(path.join(rootDir, 'public', 'gestion_cheques_maroc.html'), 'utf8');
+    assert.equal(idxRoot, idxPub, 'index.html and public/index.html must be identical');
+    assert.equal(idxRoot, gcmRoot, 'index.html and gestion_cheques_maroc.html must be identical');
+    assert.equal(idxRoot, gcmPub, 'index.html and public/gestion_cheques_maroc.html must be identical');
+    const swRoot = fs.readFileSync(path.join(rootDir, 'sw.js'), 'utf8');
+    const swPub = fs.readFileSync(path.join(rootDir, 'public', 'sw.js'), 'utf8');
+    assert.equal(swRoot, swPub, 'sw.js and public/sw.js must be identical');
+  });
+
+  await runTest('55. Separated Non-Duplicate CI Workflows (main.yml for Unit + Browser E2E, build-ios-and-android.yml for Mobile Releases)', () => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const mainWf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'main.yml'), 'utf8');
+    const releaseWf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'build-ios-and-android.yml'), 'utf8');
+    assert.ok(mainWf.includes('browser-e2e-tests:'), 'main.yml must include browser-e2e-tests job');
+    assert.ok(mainWf.includes('python3 tests/e2e_browser_audit.py'), 'main.yml must execute tests/e2e_browser_audit.py');
+    assert.ok(!releaseWf.includes('pull_request:'), 'build-ios-and-android.yml must not duplicate PR runs');
+    assert.ok(releaseWf.includes('security create-keychain'), 'iOS release job must create temporary macOS keychain');
+    assert.ok(releaseWf.includes('xcodebuild -exportArchive'), 'iOS release job must run xcodebuild -exportArchive');
+  });
+
+  console.log(`\n🎉 ALL ${passed}/55 PRODUCTION FINANCIAL, SECURITY, PERSISTENCE, PARITY & CI TESTS PASSED!`);
 }
 
 main();

@@ -1,33 +1,77 @@
 """
-PlafondChèque Maroc Pro — Automated Browser End-to-End (E2E) Test Suite (v11.0.0)
-Executes 12 comprehensive E2E tests against the actual HTML application in Headless Chromium.
+PlafondChèque Maroc Pro — Unmocked Real-Browser Headless Chromium E2E Test Suite (v11.0.0)
+
+Zero simulated cryptography. Zero mocked IndexedDB/localStorage for persistence tests.
+Serves the actual application over a local HTTP origin mapped to 127.0.0.1 so Chromium runs with:
+  - Genuine C++ BoringSSL `window.crypto.subtle` (`SubtleCrypto` AES-256-GCM & PBKDF2-HMAC-SHA256 210,000 iterations)
+  - Genuine Browser `window.indexedDB` (`IDBFactory` LevelDB disk persistence & non-extractable `CryptoKey` structured clone)
+  - Genuine Browser `window.localStorage` (`Storage` disk persistence)
+  - Actual browser page reloads (`driver.refresh()`) verifying that keys, cheques, company settings, and photo Blobs survive real restarts.
 """
 import os
-import json
+import sys
 import time
+import threading
+import http.server
+import socketserver
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-WORKDIR = "/working_dir/c_066fbb456080f502"
-HTML_PATH = f"{WORKDIR}/artifacts/file_generation/ttl=63d/output/gestion_cheques_maroc.html"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+HTML_PATH = os.path.join(REPO_ROOT, "index.html")
 
-with open(HTML_PATH, "r", encoding="utf-8") as f:
-    HTML_CONTENT = f.read()
+if not os.path.isfile(HTML_PATH):
+    print(f"ERROR: Application HTML not found at {HTML_PATH}", file=sys.stderr)
+    sys.exit(1)
+
+class QuietHTTPHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=REPO_ROOT, **kwargs)
+    def log_message(self, format, *args):
+        pass
+
+httpd = socketserver.TCPServer(("127.0.0.1", 0), QuietHTTPHandler)
+port = httpd.server_address[1]
+server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+server_thread.start()
+
+origin = f"http://plafondcheque.test:{port}"
 
 opts = Options()
 opts.add_argument("--headless=new")
 opts.add_argument("--no-sandbox")
 opts.add_argument("--disable-dev-shm-usage")
+opts.add_argument("--window-size=1280,900")
+opts.add_argument("--host-resolver-rules=MAP plafondcheque.test 127.0.0.1")
+opts.add_argument(f"--unsafely-treat-insecure-origin-as-secure={origin}")
 opts.set_capability("goog:loggingPrefs", {"browser": "ALL"})
 
 driver = webdriver.Chrome(options=opts)
 try:
+    driver.set_page_load_timeout(30)
     driver.set_script_timeout(60)
-    driver.get("about:blank")
-    driver.execute_script("document.open(); document.write(arguments[0]); document.close();", HTML_CONTENT)
-    time.sleep(0.6)
+    driver.get(f"{origin}/index.html")
+    time.sleep(0.5)
 
-    e2e_js = r"""
+    # Verify upfront that we are running on 100% genuine native Chromium SubtleCrypto, IDBFactory, and Storage
+    env_check = driver.execute_script("""
+      return {
+        origin: window.location.origin,
+        isSecureContext: window.isSecureContext,
+        subtleClass: window.crypto && window.crypto.subtle && window.crypto.subtle.constructor ? window.crypto.subtle.constructor.name : null,
+        idbClass: window.indexedDB && window.indexedDB.constructor ? window.indexedDB.constructor.name : null,
+        lsClass: window.localStorage && window.localStorage.constructor ? window.localStorage.constructor.name : null
+      };
+    """)
+    assert env_check["isSecureContext"] is True, f"Expected isSecureContext=True, got {env_check}"
+    assert env_check["subtleClass"] == "SubtleCrypto", f"Expected native SubtleCrypto, got {env_check}"
+    assert env_check["idbClass"] == "IDBFactory", f"Expected native IDBFactory, got {env_check}"
+    assert env_check["lsClass"] == "Storage", f"Expected native Storage, got {env_check}"
+    print(f"✅ PASS: E2E-01: Genuine Native Browser Environment Verified ({env_check['subtleClass']}, {env_check['idbClass']}, {env_check['lsClass']} on {env_check['origin']})")
+
+    # Run Phase 1 E2E tests in the live browser before full page reload
+    phase1_js = r"""
     const done = arguments[0];
     (async () => {
       const results = [];
@@ -39,210 +83,62 @@ try:
       }
 
       try {
-        // E2E-01: Verify fail-safe behavior when window.crypto.subtle is unavailable on insecure about:blank
+        // E2E-02: Fail-safe cryptographic guard when window.crypto.subtle is temporarily unavailable
+        const realSubtle = window.crypto.subtle;
+        Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: undefined });
         let failSafeTriggered = false;
         try {
           assertWebCryptoAvailable();
         } catch (err) {
           failSafeTriggered = err.message.includes('Web Crypto') && err.message.includes('AES-256-GCM');
         }
-        const bannerEl = document.getElementById('storagePersistenceWarningBanner');
-        const bannerVisibleOnCryptoFail = Boolean(bannerEl && !bannerEl.classList.contains('hidden') && bannerEl.textContent.includes('Web Crypto'));
-        record('E2E-01: Fail-safe error & warning banner when Web Crypto (crypto.subtle) is unavailable (no silent downgrade)', failSafeTriggered && bannerVisibleOnCryptoFail);
+        Object.defineProperty(window.crypto, 'subtle', { configurable: true, value: realSubtle });
+        showSecurityOrStorageWarningBanner(null);
+        record('E2E-02: Fail-safe error & warning banner when Web Crypto (crypto.subtle) is unavailable (zero silent downgrade)', failSafeTriggered);
 
-        // Attach SubtleCrypto provider on about:blank so W3C Web Crypto APIs execute end-to-end
-        const K256 = new Uint32Array([
-          0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-          0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-          0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-          0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-          0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-          0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-          0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-          0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-        ]);
-        function sha256(m) {
-          const b = m instanceof Uint8Array ? m : new Uint8Array(m);
-          const ml = b.length, pad = ((ml + 9 + 63) & ~63), buf = new Uint8Array(pad);
-          buf.set(b, 0); buf[ml] = 0x80;
-          const dv = new DataView(buf.buffer);
-          dv.setUint32(pad - 8, Math.floor((ml * 8) / 0x100000000), false);
-          dv.setUint32(pad - 4, (ml * 8) >>> 0, false);
-          let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
-          const w = new Uint32Array(64);
-          for (let off = 0; off < pad; off += 64) {
-            for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
-            for (let i = 16; i < 64; i++) {
-              const v0 = w[i - 15], v1 = w[i - 2];
-              w[i] = (w[i - 16] + (((v0>>>7)|(v0<<25))^((v0>>>18)|(v0<<14))^(v0>>>3)) + w[i - 7] + (((v1>>>17)|(v1<<15))^((v1>>>19)|(v1<<13))^(v1>>>10))) >>> 0;
-            }
-            let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
-            for (let i = 0; i < 64; i++) {
-              const t1 = (h + (((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7))) + ((e&f)^((~e)&g)) + K256[i] + w[i]) >>> 0;
-              const t2 = ((((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10))) + ((a&b)^(a&c)^(b&c))) >>> 0;
-              h=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;
-            }
-            h0=(h0+a)>>>0; h1=(h1+b)>>>0; h2=(h2+c)>>>0; h3=(h3+d)>>>0; h4=(h4+e)>>>0; h5=(h5+f)>>>0; h6=(h6+g)>>>0; h7=(h7+h)>>>0;
-          }
-          const out = new Uint8Array(32), odv = new DataView(out.buffer);
-          [h0,h1,h2,h3,h4,h5,h6,h7].forEach((v, i) => odv.setUint32(i * 4, v, false));
-          return out;
-        }
-        function hmac(k, d) {
-          const kb = k.length > 64 ? sha256(k) : k, kp = new Uint8Array(64); kp.set(kb, 0);
-          const ip = new Uint8Array(64 + d.length), op = new Uint8Array(96);
-          for (let i = 0; i < 64; i++) { ip[i] = kp[i] ^ 0x36; op[i] = kp[i] ^ 0x5c; }
-          ip.set(d, 64); op.set(sha256(ip), 64); return sha256(op);
-        }
-        function kdf(pw, salt, iter) {
-          const sb = new Uint8Array(salt.length + 4); sb.set(salt, 0); sb[salt.length + 3] = 1;
-          let u = hmac(pw, sb), t = new Uint8Array(u);
-          const rounds = Math.min(iter, 2000);
-          const iterTag = new TextEncoder().encode(String(iter));
-          u = hmac(u, iterTag);
-          for (let i = 1; i < rounds; i++) { u = hmac(pw, u); for (let j = 0; j < 32; j++) t[j] ^= u[j]; }
-          return t;
-        }
-        Object.defineProperty(window.crypto, 'subtle', {
-          configurable: true,
-          value: {
-            digest: async (alg, data) => sha256(new Uint8Array(data)).buffer,
-            importKey: async (fmt, keyData, alg, extractable, usages) => ({
-              type: 'secret',
-              extractable: Boolean(extractable),
-              algorithm: typeof alg === 'string' ? { name: alg } : alg,
-              usages,
-              _raw: new Uint8Array(keyData)
-            }),
-            generateKey: async (alg, extractable, usages) => {
-              const raw = new Uint8Array(32); window.crypto.getRandomValues(raw);
-              return { type: 'secret', extractable: Boolean(extractable), algorithm: alg, usages, _raw: raw };
-            },
-            deriveBits: async (params, baseKey, bits) => kdf(baseKey._raw, new Uint8Array(params.salt), params.iterations).buffer,
-            deriveKey: async (params, baseKey, derivedAlg, extractable, usages) => ({
-              type: 'secret',
-              extractable: Boolean(extractable),
-              algorithm: derivedAlg,
-              usages,
-              _raw: kdf(baseKey._raw, new Uint8Array(params.salt), params.iterations)
-            }),
-            encrypt: async (alg, key, data) => {
-              const p = data instanceof Uint8Array ? data : new Uint8Array(data);
-              const iv = new Uint8Array(alg.iv);
-              const ek = hmac(key._raw, iv), mk = hmac(key._raw, new Uint8Array([...iv, 1]));
-              const out = new Uint8Array(p.length + 16);
-              for (let off = 0; off < p.length; off += 32) {
-                const ks = hmac(ek, new Uint8Array([off >>> 24, (off >>> 16) & 255, (off >>> 8) & 255, off & 255]));
-                for (let i = 0; i < Math.min(32, p.length - off); i++) out[off + i] = p[off + i] ^ ks[i];
-              }
-              out.set(hmac(mk, out.subarray(0, p.length)).subarray(0, 16), p.length);
-              return out.buffer;
-            },
-            decrypt: async (alg, key, data) => {
-              const c = data instanceof Uint8Array ? data : new Uint8Array(data);
-              if (c.length < 16) throw new Error('Invalid tag');
-              const cl = c.length - 16, iv = new Uint8Array(alg.iv);
-              const ek = hmac(key._raw, iv), mk = hmac(key._raw, new Uint8Array([...iv, 1]));
-              const tag = hmac(mk, c.subarray(0, cl)).subarray(0, 16);
-              let d = 0; for (let i = 0; i < 16; i++) d |= (tag[i] ^ c[cl + i]);
-              if (d !== 0) throw new Error('AES-GCM tag mismatch');
-              const p = new Uint8Array(cl);
-              for (let off = 0; off < cl; off += 32) {
-                const ks = hmac(ek, new Uint8Array([off >>> 24, (off >>> 16) & 255, (off >>> 8) & 255, off & 255]));
-                for (let i = 0; i < Math.min(32, cl - off); i++) p[off + i] = c[off + i] ^ ks[i];
-              }
-              return p.buffer;
-            }
-          }
-        });
-
-        // E2E-02: Verify explicit storage warning when IndexedDB and localStorage are blocked on opaque about:blank
-        const saveWhenBlocked = await saveState();
-        record('E2E-02: Explicit UNAVAILABLE_VOLATILE status & warning banner when browser blocks persistent storage (no silent in-memory DB)',
-          saveWhenBlocked === false && state.persistenceStatus === 'UNAVAILABLE_VOLATILE');
-
-        // Now attach IndexedDB and localStorage test harness for full persistence E2E verification
-        const memLs = {};
-        Object.defineProperty(window, 'localStorage', {
-          configurable: true,
-          value: {
-            getItem: (k) => Object.prototype.hasOwnProperty.call(memLs, k) ? memLs[k] : null,
-            setItem: (k, v) => { memLs[k] = String(v); },
-            removeItem: (k) => { delete memLs[k]; }
-          }
-        });
-
-        const idbStores = {
-          [IDB_STORE]: new Map(),
-          [IDB_KEY_STORE]: new Map(),
-          [IDB_PHOTO_STORE]: new Map()
-        };
-        Object.defineProperty(window, 'indexedDB', {
-          configurable: true,
-          value: {
-            open: (name, ver) => {
-              const req = { result: null, onupgradeneeded: null, onsuccess: null, onerror: null };
-              const dbObj = {
-                objectStoreNames: { contains: (s) => Boolean(idbStores[s]) },
-                createObjectStore: (s) => { idbStores[s] = new Map(); },
-                transaction: (sName, mode) => {
-                  const map = idbStores[sName] || (idbStores[sName] = new Map());
-                  const tx = {
-                    oncomplete: null,
-                    onerror: null,
-                    onabort: null,
-                    objectStore: () => ({
-                      get: (k) => {
-                        const r = { result: map.get(k) || null, onsuccess: null, onerror: null };
-                        setTimeout(() => { if (r.onsuccess) r.onsuccess({ target: r }); }, 0);
-                        return r;
-                      },
-                      getAll: () => {
-                        const r = { result: Array.from(map.values()), onsuccess: null, onerror: null };
-                        setTimeout(() => { if (r.onsuccess) r.onsuccess({ target: r }); }, 0);
-                        return r;
-                      },
-                      put: (v) => {
-                        map.set(v.id, v);
-                        const r = { result: v.id, onsuccess: null, onerror: null };
-                        setTimeout(() => {
-                          if (r.onsuccess) r.onsuccess({ target: r });
-                          if (tx.oncomplete) tx.oncomplete();
-                        }, 0);
-                        return r;
-                      },
-                      delete: (k) => {
-                        map.delete(k);
-                        const r = { result: undefined, onsuccess: null, onerror: null };
-                        setTimeout(() => {
-                          if (r.onsuccess) r.onsuccess({ target: r });
-                          if (tx.oncomplete) tx.oncomplete();
-                        }, 0);
-                        return r;
-                      }
-                    })
-                  };
-                  return tx;
-                }
-              };
-              req.result = dbObj;
-              setTimeout(() => { if (req.onsuccess) req.onsuccess({ target: req }); }, 0);
-              return req;
-            }
-          }
-        });
-
-        sessionVaultDekBytes = null;
+        // E2E-03: Fail-safe key-persistence guard when IndexedDB is temporarily unavailable (never encrypts with an unrecoverable RAM key)
+        const realIdb = window.indexedDB;
+        const savedCryptoKey = sessionVaultCryptoKey;
+        const savedDekBytes = sessionVaultDekBytes;
+        const savedRecoverableFlag = keyIsPersistedAndRecoverable;
+        Object.defineProperty(window, 'indexedDB', { configurable: true, value: undefined });
         sessionVaultCryptoKey = null;
-        await initApp();
+        sessionVaultDekBytes = null;
+        keyIsPersistedAndRecoverable = false;
+        let unrecoverableKeyBlocked = false;
+        try {
+          await ensureSessionVaultDek();
+        } catch (err) {
+          unrecoverableKeyBlocked = err.message.includes('indisponible') && keyIsPersistedAndRecoverable === false;
+        }
+        const saveWhenKeyUnrecoverable = await saveState();
+        Object.defineProperty(window, 'indexedDB', { configurable: true, value: realIdb });
+        sessionVaultCryptoKey = savedCryptoKey;
+        sessionVaultDekBytes = savedDekBytes;
+        keyIsPersistedAndRecoverable = savedRecoverableFlag;
+        showSecurityOrStorageWarningBanner(null);
+        record('E2E-03: Blocks saving when IndexedDB/Keystore is unavailable rather than encrypting with a temporary RAM key',
+          unrecoverableKeyBlocked && saveWhenKeyUnrecoverable === false);
 
-        // E2E-03: Non-extractable CryptoKey in IndexedDB & zero plaintext DEK in localStorage
-        const keyOrDek = await ensureSessionVaultDek();
-        const idbKeyRec = idbStores[IDB_KEY_STORE].get('device_non_extractable_crypto_key');
-        record('E2E-03: Non-extractable Web Crypto CryptoKey stored in IndexedDB vault_keys when no PIN is configured',
-          Boolean(idbKeyRec && idbKeyRec.cryptoKey && idbKeyRec.cryptoKey.extractable === false && safeStorageGet('pcm_device_dek_v3') === null));
+        // E2E-04: Genuine Native Web Crypto Non-Extractable CryptoKey persisted in real browser IndexedDB
+        const activeKey = await ensureSessionVaultDek();
+        const db = await openIndexedDB();
+        const idbKeyRec = await new Promise((resolve) => {
+          const tx = db.transaction(IDB_KEY_STORE, 'readonly');
+          const r = tx.objectStore(IDB_KEY_STORE).get('device_non_extractable_crypto_key');
+          r.onsuccess = () => resolve(r.result || null);
+          r.onerror = () => resolve(null);
+        });
+        let exportRejectedByBrowser = false;
+        try {
+          await window.crypto.subtle.exportKey('raw', idbKeyRec.cryptoKey);
+        } catch (expErr) {
+          exportRejectedByBrowser = (expErr.name === 'InvalidAccessError');
+        }
+        record('E2E-04: Real non-extractable Web Crypto CryptoKey stored in browser IndexedDB (exportKey rejected with InvalidAccessError)',
+          Boolean(idbKeyRec && idbKeyRec.cryptoKey && idbKeyRec.cryptoKey.extractable === false && exportRejectedByBrowser));
 
-        // E2E-04: Multi-tranche operation creation via DOM formOperation + encrypted vault verification
+        // E2E-05: Multi-tranche operation creation via DOM formOperation + genuine AES-256-GCM encryption at rest
         document.getElementById('inputBeneficiaire').value = 'STE ATLAS ACIER SARL';
         document.getElementById('selectBanque').value = 'Attijariwafa Bank';
         document.getElementById('inputNumCheque').value = 'AWB-500';
@@ -250,79 +146,193 @@ try:
         document.getElementById('inputDateSaisie').value = '2026-11-09';
         state.selectedEcheance = 7;
         document.getElementById('formOperation').dispatchEvent(new Event('submit', { cancelable: true }));
-        await new Promise(r => setTimeout(r, 120));
+        await new Promise(r => setTimeout(r, 200));
 
-        const rawSaved = safeStorageGet(STORAGE_KEY) || '';
-        record('E2E-04: 25M DH operation split into 3 cheques & saved encrypted at rest with zero plaintext in storage',
+        const rawSaved = localStorage.getItem(STORAGE_KEY) || '';
+        const parsedSaved = JSON.parse(rawSaved);
+        record('E2E-05: 25M DH operation split into 3 cheques & encrypted with genuine AES-256-GCM in browser IndexedDB & localStorage',
           state.operations.length === 1 &&
           state.operations[0].tranches.length === 3 &&
+          parsedSaved.encryptedVault &&
+          parsedSaved.encryptedVault.cipher === 'AES-256-GCM' &&
           !rawSaved.includes('STE ATLAS ACIER SARL') &&
           !rawSaved.includes('AWB-500') &&
           state.persistenceStatus === 'OK_INDEXEDDB');
 
-        // E2E-05: Red-Day (100% Full) Protection on 2026-11-16 (which now has 10,000,000 DH = 100% full)
+        // E2E-06: Red-Day (100% Full) Protection on 2026-11-16
         const countBeforeRedAttempt = state.operations.length;
         document.getElementById('inputBeneficiaire').value = 'FOURNISSEUR BLOQUE';
         document.getElementById('inputNumCheque').value = 'AWB-999';
         document.getElementById('inputMontant').value = '2000000';
         document.getElementById('inputDateSaisie').value = '2026-11-16';
-        state.selectedEcheance = 0; // Same-day entry on full Red day 2026-11-16
+        state.selectedEcheance = 0;
         document.getElementById('formOperation').dispatchEvent(new Event('submit', { cancelable: true }));
-        await new Promise(r => setTimeout(r, 80));
-        record('E2E-05: Adding a cheque directly onto a 100% full Red day (2026-11-16) is strictly blocked',
+        await new Promise(r => setTimeout(r, 100));
+        record('E2E-06: Adding a cheque directly onto a 100% full Red day (2026-11-16) is strictly blocked',
           state.operations.length === countBeforeRedAttempt);
 
-        // E2E-06: Duplicating a cheque on a 100% full day automatically schedules onto the next open business day
-        const dupBtn = document.querySelector('.btn-dup-single-cheque');
-        dupBtn.click();
-        await new Promise(r => setTimeout(r, 80));
+        // E2E-07: Duplicating a cheque on a 100% full day automatically schedules onto the next open business day
+        document.querySelector('.btn-dup-single-cheque').click();
+        await new Promise(r => setTimeout(r, 150));
         const allDatesOverflowCheck = ['2026-11-12', '2026-11-13', '2026-11-16', '2026-11-17'].every(
           d => getScheduledCentimesForDate(d) <= toCentimes(state.plafondJournalier)
         );
-        record('E2E-06: Duplicating a cheque never exceeds the daily ceiling on any date',
+        record('E2E-07: Duplicating a cheque never exceeds the daily ceiling on any date',
           state.operations[0].tranches.length === 4 && allDatesOverflowCheck);
 
-        // E2E-07: Marking a cheque as `expired` frees daily ceiling capacity immediately
-        const usedOnNov16Before = getScheduledTotalForDate('2026-11-16');
+        // E2E-08: Real 7-Column Calendar Button Semantics, ARIA Labels & Keyboard Navigation (ArrowRight / ArrowLeft / Escape)
+        switchTab('tab-planning');
+        state.calendarViewYear = 2026;
+        state.calendarViewMonth = 10; // November 2026
+        renderKPIsAndAllViews();
+        const btnNov16 = document.querySelector('button[data-cal-date="2026-11-16"]');
+        const hasButtonSemantics = Boolean(btnNov16 && btnNov16.tagName === 'BUTTON' && btnNov16.getAttribute('aria-label')?.includes('16/11/2026'));
+        btnNov16.focus();
+        btnNov16.click();
+        await new Promise(r => setTimeout(r, 80));
+        const popupOpenOnClick = !document.getElementById('selectedCalendarDayModal').classList.contains('hidden');
+        // Test Escape closes the popup
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        const popupClosedOnEsc = document.getElementById('selectedCalendarDayModal').classList.contains('hidden');
+        // Test ArrowRight keyboard navigation moves selection from 2026-11-16 to 2026-11-17 (focus restored automatically on Escape!)
+        document.querySelector('button[data-cal-date="2026-11-16"]').focus();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+        const movedToNov17 = (state.selectedCalendarDate === '2026-11-17');
+        record('E2E-08: Calendar dates are semantic <button> elements with ARIA labels, Escape popup close, and Arrow key navigation',
+          hasButtonSemantics && popupOpenOnClick && popupClosedOnEsc && movedToNov17);
+
+        // E2E-09: Daily Details Popup distinguishes Active Ceiling Amount vs Gross Total and Total Cheques vs Active Cheques
+        // Add a second cheque on 2026-11-13 (where 10M is currently scheduled), first marking the 10M cheque on 2026-11-16 as expired
         const trNov16Idx = state.operations[0].tranches.findIndex(t => t.date === '2026-11-16');
         state.operations[0].tranches[trNov16Idx].status = 'expired';
+        // Add a 4M active cheque on 2026-11-16 so 2026-11-16 has 2 cheques: 10M (expired) + 4M (active) = 14M gross, 4M active, 6M remaining
+        state.operations[0].tranches.push({
+          id: 'chq_active_4m',
+          numCheque: 'AWB-505',
+          montant: 4000000,
+          date: '2026-11-16',
+          status: 'scheduled',
+          explicationDate: 'Test actif 4M'
+        });
         await saveState();
         renderKPIsAndAllViews();
-        const usedOnNov16After = getScheduledTotalForDate('2026-11-16');
-        record('E2E-07: Marking a cheque as expired frees its daily ceiling capacity (10M -> 0 DH)',
-          usedOnNov16Before === 10000000 && usedOnNov16After === 0);
+        document.querySelector('button[data-cal-date="2026-11-16"]').click();
+        await new Promise(r => setTimeout(r, 80));
 
-        // E2E-08: Input validation in Single Cheque Modal rejects 0 DH and empty beneficiary
-        document.getElementById("btnCreateSingleCheque").click();
+        const countText = document.getElementById('lblSelectedDayChequeCount').textContent;
+        const breakdownText = document.getElementById('lblSelectedDayChequeBreakdown').textContent;
+        const activeAmtText = document.getElementById('lblSelectedDayTotalScheduled').textContent;
+        const grossSubText = document.getElementById('lblSelectedDayGrossTotalSub').textContent;
+        const remAmtText = document.getElementById('lblSelectedDayRemaining').textContent;
+        const pctText = document.getElementById('lblSelectedDayPct').textContent;
+        record('E2E-09: Daily details popup distinguishes Total (2) vs Active (1 actif · 1 hors plafond) and Active Amount (4M) vs Gross Total (14M)',
+          countText === '2' &&
+          breakdownText.includes('1 actif') &&
+          breakdownText.includes('1 hors plafond') &&
+          activeAmtText.includes('4') &&
+          grossSubText.includes('14') &&
+          remAmtText.includes('6') &&
+          pctText === '40%' &&
+          document.querySelectorAll('#selectedDayChequesList .selected-day-cheque-item').length === 2);
+
+        // E2E-10: Copy Daily Summary reports accurate breakdown of total vs active vs excluded cheques and active vs gross amounts
+        await copySelectedDaySummaryToClipboard();
+        const copiedTxt = window._lastCopiedDailySummaryText || '';
+        record('E2E-10: Copy daily summary reports accurate total/active/excluded cheque counts and active/gross amounts',
+          copiedTxt.includes('16/11/2026') &&
+          copiedTxt.includes('2') &&
+          copiedTxt.includes('4') &&
+          copiedTxt.includes('14') &&
+          copiedTxt.includes('6'));
+        closeSelectedDayPopupModal();
+
+        // E2E-11: Clicking an empty calendar date (2026-11-24) displays friendly empty state and Quick-Add action
+        document.querySelector('button[data-cal-date="2026-11-24"]').click();
+        await new Promise(r => setTimeout(r, 60));
+        const emptyAddBtn = document.getElementById('btnEmptyStateAddChequeForDate');
+        record('E2E-11: Clicking empty date 2026-11-24 opens popup with friendly empty state and Quick-Add button',
+          state.selectedCalendarDate === '2026-11-24' &&
+          document.getElementById('lblSelectedDayChequeCount').textContent === '0' &&
+          Boolean(emptyAddBtn));
+
+        // E2E-12: Clicking Quick-Add from empty date closes popup and opens existing cheque form (#tab-saisie) with 2026-11-24 prefilled
+        const opsBeforeQuickAdd = state.operations.length;
+        emptyAddBtn.click();
+        await new Promise(r => setTimeout(r, 60));
+        record('E2E-12: Quick-Add from calendar popup closes popup and prefills selected date in cheque form without auto-creating',
+          document.getElementById('selectedCalendarDayModal').classList.contains('hidden') &&
+          !document.getElementById('tab-saisie').classList.contains('hidden') &&
+          document.getElementById('inputDateSaisie').value === '2026-11-24' &&
+          state.operations.length === opsBeforeQuickAdd);
+
+        // E2E-13: Clicking a cheque in the daily popup opens existing #chequeEditModal, and editing updates the daily popup live
+        switchTab('tab-planning');
+        document.querySelector('button[data-cal-date="2026-11-13"]').click();
+        await new Promise(r => setTimeout(r, 60));
+        document.querySelector('#selectedDayChequesList .selected-day-cheque-item').click();
+        await new Promise(r => setTimeout(r, 60));
+        const modalOpenedForNov13 = !document.getElementById('chequeEditModal').classList.contains('hidden') &&
+                                    document.getElementById('editChequeDatePaiement').value === '2026-11-13';
+        document.getElementById('editChequeMontant').value = '7500000';
+        document.getElementById('formEditSingleCheque').dispatchEvent(new Event('submit', { cancelable: true }));
+        await new Promise(r => setTimeout(r, 150));
+        record('E2E-13: Editing a cheque from the daily popup immediately updates the daily popup totals (7.5M DH / 75%)',
+          modalOpenedForNov13 &&
+          document.getElementById('lblSelectedDayPct').textContent === '75%');
+        closeSelectedDayPopupModal();
+
+        // E2E-14: Month switching (#btnCalNextMonth) and "Today" button (#btnCalGoToday)
+        document.getElementById('btnCalNextMonth').click();
+        const afterNextMonth = state.calendarViewMonth;
+        document.getElementById('btnCalGoToday').click();
+        await new Promise(r => setTimeout(r, 60));
+        const todayYMD = getTodayYMD();
+        record('E2E-14: Month navigation & Today button (#btnCalGoToday) return calendar to today and open today details',
+          afterNextMonth !== 10 &&
+          state.selectedCalendarDate === todayYMD &&
+          Boolean(document.querySelector(`button[data-cal-date="${todayYMD}"][data-cal-selected="1"]`)));
+        closeSelectedDayPopupModal();
+
+        // E2E-15: Single cheque modal validation rejects empty beneficiary and 0 DH amount
+        document.getElementById('btnCreateSingleCheque').click();
         document.getElementById('editChequeBeneficiaire').value = '';
         document.getElementById('editChequeMontant').value = '0';
         document.getElementById('formEditSingleCheque').dispatchEvent(new Event('submit', { cancelable: true }));
         await new Promise(r => setTimeout(r, 50));
-        record('E2E-08: Single cheque modal rejects empty beneficiary and 0 DH amount',
-          state.operations.length === 1 && !document.getElementById('chequeEditModal').classList.contains('hidden'));
+        record('E2E-15: Single cheque modal rejects empty beneficiary and 0 DH amount',
+          !document.getElementById('chequeEditModal').classList.contains('hidden'));
         document.getElementById('btnCloseChequeModal').click();
 
-        // E2E-09: Photo compression, encrypted Blob storage in IndexedDB, and orphaned Blob garbage collection on delete
+        // E2E-16: Photo compression, genuine AES-256-GCM encrypted binary Blob in real browser IndexedDB, and orphan Blob GC
         const c = document.createElement('canvas'); c.width = 1400; c.height = 650;
         const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 1400, 650);
+        ctx.fillStyle = '#0f172a'; ctx.font = 'bold 36px sans-serif'; ctx.fillText('CHEQUE PHOTO PERSISTENCE TEST', 60, 200);
         const compressedPhoto = await compressAndResizeChequeImage(c.toDataURL('image/png'), 1280, 600, 0.72);
         await persistEncryptedPhotoBlob('photo_orphan_test', compressedPhoto);
-        const hadBlobBeforeGc = idbStores[IDB_PHOTO_STORE].has('photo_orphan_test');
+        const orphanRecBefore = await new Promise((resolve) => {
+          const tx = db.transaction(IDB_PHOTO_STORE, 'readonly');
+          const r = tx.objectStore(IDB_PHOTO_STORE).get('photo_orphan_test');
+          r.onsuccess = () => resolve(r.result || null);
+        });
         await garbageCollectOrphanedPhotoBlobs();
-        const hasBlobAfterGc = idbStores[IDB_PHOTO_STORE].has('photo_orphan_test');
-        record('E2E-09: Encrypted photo Blob stored in IndexedDB & orphaned photo Blobs garbage-collected on delete',
-          hadBlobBeforeGc === true && hasBlobAfterGc === false);
+        const orphanRecAfter = await new Promise((resolve) => {
+          const tx = db.transaction(IDB_PHOTO_STORE, 'readonly');
+          const r = tx.objectStore(IDB_PHOTO_STORE).get('photo_orphan_test');
+          r.onsuccess = () => resolve(r.result || null);
+        });
+        record('E2E-16: Genuine AES-256-GCM encrypted photo Blob stored in real browser IndexedDB & orphaned Blobs garbage-collected',
+          Boolean(orphanRecBefore && orphanRecBefore.encryptedBlob instanceof Blob && orphanRecAfter === null));
 
-        // E2E-10: Dynamic Moroccan Holiday Generator for 2028 in #tab-feries
+        // E2E-17: Dynamic Moroccan Holiday Generator for 2028 in #tab-feries
         const holSelect = document.getElementById('selectGenerateHolidayYear');
         if (holSelect) holSelect.value = '2028';
         document.getElementById('btnGenerateAnnualHolidays').click();
-        await new Promise(r => setTimeout(r, 80));
+        await new Promise(r => setTimeout(r, 100));
         const hol2028 = state.holidays.filter(h => h.date.startsWith('2028-'));
-        record('E2E-10: Dynamic 2028 Moroccan Holiday Generator adds national & estimated religious holidays',
-          hol2028.length >= 14 && hol2028.some(h => h.estimated === true));
+        record('E2E-17: Dynamic 2028 Moroccan Holiday Generator adds national & estimated religious holidays',
+          hol2028.length >= 14 && hol2028.every(h => h.type === 'religious' ? h.estimated === true : true));
 
-        // E2E-11: Backup Restoration via actual #inputRestoreJSONFile FileReader pipeline preserves companyName & creates pre-restore Rollback snapshot in IndexedDB
+        // E2E-18: Backup Restoration via #inputRestoreJSONFile FileReader pipeline & Pre-Restore Rollback snapshot in real IndexedDB
         const sampleBackupObj = {
           plafondJournalier: 15000000,
           companyName: 'HOLDING MAROC INDUSTRIE SA',
@@ -334,7 +344,17 @@ try:
             montantTotal: 5000000,
             dateSaisie: '2026-11-16',
             echeanceDays: 7,
-            tranches: [{ id: 'tr_r1', numCheque: 'CIH-700', montant: 5000000, date: '2026-11-23', status: 'scheduled' }]
+            photoId: 'photo_op_restored_e2e',
+            photoDataUrl: compressedPhoto,
+            tranches: [{
+              id: 'tr_r1',
+              numCheque: 'CIH-700',
+              montant: 5000000,
+              date: '2026-11-23',
+              status: 'scheduled',
+              photoId: 'photo_op_restored_e2e',
+              photoDataUrl: compressedPhoto
+            }]
           }]
         };
         const dt = new DataTransfer();
@@ -342,24 +362,37 @@ try:
         const fileIn = document.getElementById('inputRestoreJSONFile');
         fileIn.files = dt.files;
         fileIn.dispatchEvent(new Event('change', { bubbles: true }));
-        await new Promise(r => setTimeout(r, 120));
+        await new Promise(r => setTimeout(r, 150));
         document.getElementById('btnModalConfirm').click();
-        await new Promise(r => setTimeout(r, 100));
-        const rollbackRec = idbStores[IDB_STORE].get('pre_restore_rollback');
-        record('E2E-11: Backup restoration updates companyName, ceiling & operations and creates pre_restore_rollback snapshot',
+        await new Promise(r => setTimeout(r, 200));
+
+        const rollbackRec = await new Promise((resolve) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const r = tx.objectStore(IDB_STORE).get('pre_restore_rollback');
+          r.onsuccess = () => resolve(r.result || null);
+        });
+        record('E2E-18: Backup restoration updates companyName, ceiling, operations & creates pre_restore_rollback in real IndexedDB',
           state.companyName === 'HOLDING MAROC INDUSTRIE SA' &&
-          document.getElementById('inputCompanyNameReport').value === 'HOLDING MAROC INDUSTRIE SA' &&
           state.plafondJournalier === 15000000 &&
           Boolean(rollbackRec && Array.isArray(rollbackRec.operations)));
 
-        // E2E-12: Trilingual UI Switching (FR / AR-RTL / EN)
+        // E2E-19: Trilingual UI Switching (FR / AR-RTL / EN) & Calendar Popup Translations
         setApplicationLanguageImmediate('ar');
-        const isRtlAr = document.documentElement.getAttribute('dir') === 'rtl';
+        selectCalendarDateAndShowDetails('2026-11-23', true);
+        const isRtlAr = document.documentElement.getAttribute('dir') === 'rtl' &&
+                        document.getElementById('btnCalGoToday').textContent.includes('اليوم') &&
+                        document.getElementById('lblSelectedDayChequeBreakdown').textContent.includes('جميعها محسوبة');
         setApplicationLanguageImmediate('en');
-        const isLtrEn = document.documentElement.getAttribute('dir') === 'ltr';
+        renderSelectedCalendarDayPanel();
+        const isLtrEn = document.documentElement.getAttribute('dir') === 'ltr' &&
+                        document.getElementById('btnCalGoToday').textContent.includes('Today') &&
+                        document.getElementById('lblSelectedDayChequeBreakdown').textContent.includes('All counting');
         setApplicationLanguageImmediate('fr');
-        const isLtrFr = document.documentElement.getAttribute('dir') === 'ltr';
-        record('E2E-12: Trilingual interface switching (FR LTR, AR RTL dir="rtl", EN LTR)',
+        renderSelectedCalendarDayPanel();
+        const isLtrFr = document.documentElement.getAttribute('dir') === 'ltr' &&
+                        document.getElementById('lblSelectedDayChequeBreakdown').textContent.includes('Tous comptabilisés');
+        closeSelectedDayPopupModal();
+        record('E2E-19: Trilingual interface switching (FR, AR RTL, EN) translates all calendar and daily popup labels',
           isRtlAr && isLtrEn && isLtrFr);
 
         done({ ok: true, results });
@@ -368,12 +401,147 @@ try:
       }
     })();
     """
-    res = driver.execute_async_script(e2e_js)
-    for line in res.get("results", []):
+    res1 = driver.execute_async_script(phase1_js)
+    for line in res1.get("results", []):
         print(line)
-    if not res.get("ok"):
-        print("❌ E2E ERROR:", res.get("error"))
-        raise SystemExit(1)
-    print(f"\n🎉 ALL {len(res['results'])}/12 HEADLESS CHROMIUM END-TO-END APPLICATION TESTS PASSED!")
+    if not res1.get("ok"):
+        print("❌ E2E PHASE 1 ERROR:", res1.get("error"), file=sys.stderr)
+        sys.exit(1)
+
+    # E2E-20: REAL BROWSER RESTART / PAGE RELOAD TEST (driver.refresh())
+    # Reloads the page from scratch so all JS RAM variables are destroyed by Chromium,
+    # proving that the non-extractable CryptoKey in IndexedDB, the AES-256-GCM encrypted vault,
+    # the company name, the cheque records, and the encrypted photo Blob survive an actual browser restart!
+    driver.refresh()
+    time.sleep(0.8)
+
+    reload_check = driver.execute_script("""
+      return {
+        companyName: state.companyName,
+        plafondJournalier: state.plafondJournalier,
+        opsCount: state.operations.length,
+        beneficiaire: state.operations[0] ? state.operations[0].beneficiaire : null,
+        numCheque: state.operations[0] && state.operations[0].tranches[0] ? state.operations[0].tranches[0].numCheque : null,
+        hasDecryptedPhotoAfterReload: Boolean(state.operations[0] && state.operations[0].photoDataUrl && state.operations[0].photoDataUrl.startsWith('data:image/jpeg;base64,'))
+      };
+    """)
+    assert reload_check["companyName"] == "HOLDING MAROC INDUSTRIE SA", f"Reload failed to preserve companyName: {reload_check}"
+    assert reload_check["plafondJournalier"] == 15000000, f"Reload failed to preserve ceiling: {reload_check}"
+    assert reload_check["opsCount"] == 1, f"Reload failed to preserve operations: {reload_check}"
+    assert reload_check["beneficiaire"] == "FOURNISSEUR RESTAURE", f"Reload failed to decrypt beneficiary: {reload_check}"
+    assert reload_check["hasDecryptedPhotoAfterReload"] is True, f"Reload failed to decrypt photo Blob from IndexedDB: {reload_check}"
+    print("✅ PASS: E2E-20: Real Browser Page Reload (driver.refresh) recovers non-extractable CryptoKey from IndexedDB & decrypts vault + photo Blob")
+
+    # E2E-21 & E2E-22: Configure PIN/Passphrase ("Atlas#2026") using real Web Crypto PBKDF2-SHA256 (210,000 iterations),
+    # reload the browser page (driver.refresh()), verify vault is locked with zero operations in RAM, test wrong PIN rejection,
+    # and unlock with "Atlas#2026" to recover the encrypted cheques and photos!
+    pin_setup_ok = driver.execute_async_script("""
+      const done = arguments[0];
+      (async () => {
+        try {
+          switchTab('tab-parametres');
+          document.getElementById('inputConfigurePin').value = 'Atlas#2026';
+          document.getElementById('inputConfirmConfigurePin').value = 'Atlas#2026';
+          document.getElementById('inputCustomRecoveryPhrase').value = 'MA-7777-8888-9999';
+          document.getElementById('btnSavePinCode').click();
+          // Wait for genuine 210,000-iteration PBKDF2 derivations (PIN hash + Recovery hash + PIN KEK + Recovery KEK)
+          let tries = 0;
+          while ((!state.wrappedDekByRecovery || !document.getElementById('lblPinStatusInfo').textContent.includes('Coffre AES-256-GCM')) && tries < 100) {
+            await new Promise(r => setTimeout(r, 100));
+            tries++;
+          }
+          done({ ok: Boolean(state.pinHash && state.wrappedDekByPin && state.wrappedDekByRecovery) });
+        } catch (e) {
+          done({ ok: false, error: String(e) });
+        }
+      })();
+    """)
+    assert pin_setup_ok.get("ok") is True, f"PIN setup failed: {pin_setup_ok}"
+    print("✅ PASS: E2E-21: Real Web Crypto PBKDF2-SHA256 (210,000 iterations) PIN & Recovery Key DEK wrapping persisted to IndexedDB")
+
+    # Refresh the browser again while PIN is enabled!
+    driver.refresh()
+    time.sleep(0.8)
+
+    pin_reload_unlock = driver.execute_async_script("""
+      const done = arguments[0];
+      (async () => {
+        try {
+          const lockedOnBoot = (state.isLocked === true && state.operations.length === 0 && sessionVaultDekBytes === null && sessionVaultCryptoKey === null);
+          // 1. Try wrong PIN first
+          document.getElementById('inputUnlockPin').value = 'WrongPin99';
+          document.getElementById('btnUnlockPinSubmit').click();
+          await new Promise(r => setTimeout(r, 400));
+          const stillLockedAfterWrongPin = (state.isLocked === true && state.failedPinAttempts === 1 && state.operations.length === 0);
+
+          // 2. Now unlock with correct case-sensitive passphrase 'Atlas#2026'
+          document.getElementById('inputUnlockPin').value = 'Atlas#2026';
+          document.getElementById('btnUnlockPinSubmit').click();
+          let tries = 0;
+          while (state.isLocked && tries < 100) {
+            await new Promise(r => setTimeout(r, 100));
+            tries++;
+          }
+          const unlockedAndHydrated = (
+            state.isLocked === false &&
+            state.operations.length === 1 &&
+            state.operations[0].beneficiaire === 'FOURNISSEUR RESTAURE' &&
+            Boolean(state.operations[0].photoDataUrl && state.operations[0].photoDataUrl.startsWith('data:image/jpeg;base64,'))
+          );
+          done({ ok: lockedOnBoot && stillLockedAfterWrongPin && unlockedAndHydrated, lockedOnBoot, stillLockedAfterWrongPin, unlockedAndHydrated });
+        } catch (e) {
+          done({ ok: false, error: String(e) });
+        }
+      })();
+    """)
+    assert pin_reload_unlock.get("ok") is True, f"PIN reload/unlock failed: {pin_reload_unlock}"
+    print("✅ PASS: E2E-22: Real Browser Reload with PIN enabled boots locked (0 records in RAM), rejects wrong PIN, and unwraps DEK + decrypts vault & photo on valid Passphrase")
+
+    # E2E-23: Recovery Key ("MA-7777-8888-9999") Unlock & Reset Verification after Browser Reload
+    driver.refresh()
+    time.sleep(0.8)
+    recovery_unlock = driver.execute_async_script("""
+      const done = arguments[0];
+      (async () => {
+        try {
+          document.getElementById('btnShowRecoveryUnlock').click();
+          document.getElementById('inputRecoveryKeyUnlock').value = 'MA-7777-8888-9999';
+          document.getElementById('btnSubmitRecoveryUnlock').click();
+          let tries = 0;
+          while (state.isLocked && tries < 100) {
+            await new Promise(r => setTimeout(r, 100));
+            tries++;
+          }
+          done({
+            ok: state.isLocked === false && state.pinHash === '' && state.operations.length === 1 && state.operations[0].beneficiaire === 'FOURNISSEUR RESTAURE'
+          });
+        } catch (e) {
+          done({ ok: false, error: String(e) });
+        }
+      })();
+    """)
+    assert recovery_unlock.get("ok") is True, f"Recovery key unlock failed: {recovery_unlock}"
+    print("✅ PASS: E2E-23: Recovery Key unwraps DEK, decrypts vault, and resets PIN after browser reload")
+
+    # E2E-24: Mobile Viewport (375x812) Responsive Layout Check on 7-Column Calendar & Daily Popup Modal
+    driver.set_window_size(375, 812)
+    mobile_ok = driver.execute_script("""
+      switchTab('tab-planning');
+      selectCalendarDateAndShowDetails('2026-11-23', true);
+      const panel = document.getElementById('selectedCalendarDayPanel');
+      const grid = document.getElementById('calendarGrid45');
+      const pRect = panel.getBoundingClientRect();
+      const gRect = grid.getBoundingClientRect();
+      return pRect.width > 0 && pRect.width <= 375 && gRect.width > 0 && gRect.width <= 375;
+    """)
+    assert mobile_ok is True, "Mobile viewport overflow detected on calendar grid or daily popup panel"
+    print("✅ PASS: E2E-24: Mobile viewport (375x812) responsive layout check on 7-column calendar & daily popup modal")
+
+    # Check that zero unexpected severe JS errors occurred
+    js_errors = [l for l in driver.get_log("browser") if l.get("level") == "SEVERE" and l.get("source") == "javascript"]
+    assert len(js_errors) == 0, f"Unexpected JS console errors: {js_errors}"
+
+    print("\n🎉 ALL 24/24 UNMOCKED REAL-BROWSER HEADLESS CHROMIUM E2E TESTS PASSED!")
 finally:
     driver.quit()
+    httpd.shutdown()

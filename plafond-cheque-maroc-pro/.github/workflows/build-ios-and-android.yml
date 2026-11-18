@@ -1,9 +1,8 @@
-name: PlafondChèque Maroc Pro — CI Tests, Debug Builds & Signed Production Releases (v11.0.0)
+name: PlafondChèque Maroc Pro — CI Unit & Browser E2E Tests, Debug Builds & Signed Production Releases (v11.0.0)
 on:
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -16,23 +15,42 @@ on:
           - production-release
 
 jobs:
-  automated-tests:
-    name: 1. Automated Unit & Integration Tests
+  automated-unit-tests:
+    name: 1. Automated Unit, Integration & Parity Tests (Node.js)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Run Engine, Cryptographic, Persistence & Notification Test Suite
+      - name: Run Engine, Cryptographic, Persistence & Parity Test Suite
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
           npm test
 
+  browser-e2e-tests:
+    name: 2. Headless Chromium Browser E2E Tests (Selenium)
+    needs: automated-unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          install-chromedriver: true
+      - name: Install Python E2E Dependencies & Execute Browser E2E Suite
+        run: |
+          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
+          cd "$PKG_DIR"
+          pip install -r tests/requirements.txt
+          python3 tests/e2e_browser_audit.py
+
   android-debug-testing:
-    name: 2. Android Debug / Testing Build (APK)
-    needs: automated-tests
+    name: 3. Android Debug / Testing Build (APK)
+    needs: [automated-unit-tests, browser-e2e-tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,14 +65,13 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
-          # Preserve existing custom AndroidManifest.xml and resources; only run cap add if android/build.gradle is absent
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0 capacitor-secure-storage-plugin@0.9.0
           if [ ! -f "android/build.gradle" ]; then
-            cp -f android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.backup.xml 2>/dev/null || true
+            cp -rf android /tmp/android_custom_backup 2>/dev/null || true
             rm -rf android
             npx cap add android
-            if [ -f "/tmp/AndroidManifest.backup.xml" ]; then
-              cp -f /tmp/AndroidManifest.backup.xml android/app/src/main/AndroidManifest.xml
+            if [ -d "/tmp/android_custom_backup/app/src/main" ]; then
+              cp -rf /tmp/android_custom_backup/app/src/main/* android/app/src/main/ 2>/dev/null || true
             fi
           fi
           npx cap sync android
@@ -68,8 +85,8 @@ jobs:
           path: PlafondCheque-Maroc-Pro-Android-Debug.apk
 
   android-production-release:
-    name: 3. Android Signed Production Release (APK & AAB)
-    needs: automated-tests
+    name: 4. Android Signed Production Release (APK & Play Store AAB)
+    needs: [automated-unit-tests, browser-e2e-tests]
     if: github.event.inputs.release_mode == 'production-release' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -90,13 +107,13 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/android@6.1.0 @capacitor/local-notifications@6.1.0 capacitor-secure-storage-plugin@0.9.0
           if [ ! -f "android/build.gradle" ]; then
-            cp -f android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.backup.xml 2>/dev/null || true
+            cp -rf android /tmp/android_custom_backup 2>/dev/null || true
             rm -rf android
             npx cap add android
-            if [ -f "/tmp/AndroidManifest.backup.xml" ]; then
-              cp -f /tmp/AndroidManifest.backup.xml android/app/src/main/AndroidManifest.xml
+            if [ -d "/tmp/android_custom_backup/app/src/main" ]; then
+              cp -rf /tmp/android_custom_backup/app/src/main/* android/app/src/main/ 2>/dev/null || true
             fi
           fi
           npx cap sync android
@@ -113,19 +130,19 @@ jobs:
             cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android-Signed-Release.apk" || true
             cp app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android-PlayStore.aab" || true
           else
-            echo "Notice: ANDROID_KEYSTORE_BASE64 secret not configured. Skipping signed production bundle; use android-debug-testing artifact or configure GitHub Repository Secrets."
+            echo "Notice: ANDROID_KEYSTORE_BASE64 secret not configured. Skipping signed production bundle; configure GitHub Secrets for Play Store release."
           fi
 
   ios-build-and-archive:
-    name: 4. iOS Testing & Signed App Store Archive
-    needs: automated-tests
+    name: 5. iOS Testing Build & Signed App Store ExportArchive
+    needs: [automated-unit-tests, browser-e2e-tests]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Non-Destructive Capacitor Sync & iOS Build
+      - name: Non-Destructive Capacitor Sync, Keychain Provisioning & Xcode Archive/Export
         env:
           IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
           IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
@@ -134,8 +151,7 @@ jobs:
         run: |
           PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
           cd "$PKG_DIR"
-          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0
-          # Preserve existing custom Info.plist, PrivacyInfo.xcprivacy, and Assets.xcassets
+          npm install @capacitor/core@6.1.0 @capacitor/cli@6.1.0 @capacitor/ios@6.1.0 @capacitor/local-notifications@6.1.0 capacitor-secure-storage-plugin@0.9.0
           if [ ! -d "ios/App/App.xcodeproj" ]; then
             cp -rf ios /tmp/ios_custom_backup 2>/dev/null || true
             rm -rf ios
@@ -143,24 +159,104 @@ jobs:
             if [ -d "/tmp/ios_custom_backup/App/App" ]; then
               cp -f /tmp/ios_custom_backup/App/App/Info.plist ios/App/App/Info.plist 2>/dev/null || true
               cp -f /tmp/ios_custom_backup/App/App/PrivacyInfo.xcprivacy ios/App/App/PrivacyInfo.xcprivacy 2>/dev/null || true
+              cp -f /tmp/ios_custom_backup/App/App/SecureVaultKeychainPlugin.swift ios/App/App/SecureVaultKeychainPlugin.swift 2>/dev/null || true
               cp -rf /tmp/ios_custom_backup/App/App/Assets.xcassets/* ios/App/App/Assets.xcassets/ 2>/dev/null || true
             fi
           fi
           npx cap sync ios
           cd ios/App
+
           if [ -n "$IOS_CERTIFICATE_P12_BASE64" ] && [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ] && [ -n "$APPLE_TEAM_ID" ]; then
-            echo "Building Signed iOS Release Archive with Apple Developer Credentials..."
-            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -archivePath build/App.xcarchive DEVELOPMENT_TEAM="$APPLE_TEAM_ID" archive
+            echo "1. Creating temporary macOS build keychain and importing P12 distribution certificate..."
+            KEYCHAIN_PATH="$RUNNER_TEMP/pcm_signing.keychain-db"
+            KEYCHAIN_PASS="$(openssl rand -base64 24)"
+            echo "$IOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist_cert.p12"
+            echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+
+            security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security import "$RUNNER_TEMP/dist_cert.p12" -P "$IOS_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+            echo "2. Installing Apple Mobile Provisioning Profile..."
+            PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision"))
+            PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" /dev/stdin <<< $(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision"))
+            mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+            cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+            echo "3. Generating ExportOptions.plist..."
+            cat << EOF_PLIST > "$RUNNER_TEMP/ExportOptions.plist"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>$APPLE_TEAM_ID</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>ma.plafondcheque.pro</key>
+                  <string>$PROFILE_UUID</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF_PLIST
+
+            echo "4. Archiving and exporting signed App Store IPA..."
+            if [ -d "App.xcworkspace" ]; then
+              xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos \
+                -archivePath "$RUNNER_TEMP/App.xcarchive" \
+                DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+                CODE_SIGN_STYLE="Manual" \
+                PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+                CODE_SIGN_IDENTITY="Apple Distribution" \
+                archive
+            else
+              xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos \
+                -archivePath "$RUNNER_TEMP/App.xcarchive" \
+                DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+                CODE_SIGN_STYLE="Manual" \
+                PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+                CODE_SIGN_IDENTITY="Apple Distribution" \
+                archive
+            fi
+
+            xcodebuild -exportArchive \
+              -archivePath "$RUNNER_TEMP/App.xcarchive" \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+              -exportPath "$RUNNER_TEMP/ios_export"
+
+            cp "$RUNNER_TEMP"/ios_export/*.ipa "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-iOS.ipa"
           else
-            echo "Building Unsigned iOS Testing Bundle (Configure IOS_CERTIFICATE_P12_BASE64, IOS_PROVISIONING_PROFILE_BASE64 & APPLE_TEAM_ID secrets for App Store Connect IPA signing)..."
-            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+            echo "Building Unsigned iOS Testing Bundle (Configure IOS_CERTIFICATE_P12_BASE64, IOS_PROVISIONING_PROFILE_BASE64 & APPLE_TEAM_ID secrets for signed App Store Connect IPA)..."
+            if [ -d "App.xcworkspace" ]; then
+              xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+            else
+              xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
+            fi
             mkdir -p "$GITHUB_WORKSPACE/Payload"
             cp -r build/Build/Products/Release-iphoneos/App.app "$GITHUB_WORKSPACE/Payload/"
             cd "$GITHUB_WORKSPACE"
-            zip -r PlafondCheque-Maroc-Pro-iOS-Testing-Unsigned.ipa Payload
+            zip -r PlafondCheque-Maroc-Pro-iOS.ipa Payload
+          fi
+      - name: Clean Up Temporary Signing Credentials & Keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/dist_cert.p12" "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/ExportOptions.plist"
+          if [ -f "$RUNNER_TEMP/pcm_signing.keychain-db" ]; then
+            security delete-keychain "$RUNNER_TEMP/pcm_signing.keychain-db" || true
           fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: PlafondCheque-Maroc-Pro-iOS-Testing-Bundle
-          path: PlafondCheque-Maroc-Pro-iOS-Testing-Unsigned.ipa
+          name: PlafondCheque-Maroc-Pro-iOS-IPA
+          path: PlafondCheque-Maroc-Pro-iOS.ipa

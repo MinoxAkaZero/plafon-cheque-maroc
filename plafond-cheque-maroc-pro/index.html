@@ -1511,24 +1511,116 @@
               <h3 class="text-sm sm:text-base font-bold text-slate-900">Calendrier Mensuel Interactif & Vue 35 Jours</h3>
               <p class="text-xs text-slate-500">Naviguez entre les mois et années pour inspecter les jours ouvrables, les plafonds restants et les jours fériés.</p>
             </div>
-            <!-- Month / Year Navigation Controls -->
-            <div class="flex items-center gap-2">
-              <button type="button" id="btnCalPrevMonth" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700">◀ Mois préc.</button>
-              <span id="lblCalCurrentMonthYear" class="text-xs sm:text-sm font-extrabold text-slate-900 min-w-[140px] text-center capitalize">Novembre 2026</span>
-              <button type="button" id="btnCalNextMonth" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700">Mois suiv. ▶</button>
+            <!-- Month / Year Navigation Controls + Today Button -->
+            <div class="flex items-center flex-wrap gap-2">
+              <button type="button" id="btnCalPrevMonth" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 cursor-pointer">◀ Mois préc.</button>
+              <span id="lblCalCurrentMonthYear" class="text-xs sm:text-sm font-extrabold text-slate-900 min-w-[120px] text-center capitalize">11 / 2026</span>
+              <button type="button" id="btnCalNextMonth" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 cursor-pointer">Mois suiv. ▶</button>
+              <button type="button" id="btnCalGoToday" class="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-xs font-extrabold text-indigo-800 transition cursor-pointer" data-i18n="cal_btn_today">Aujourd’hui</button>
             </div>
           </div>
 
           <!-- Legend -->
-          <div class="flex flex-wrap items-center gap-3 text-xs mb-3">
-            <span class="inline-flex items-center gap-1" data-i18n="cal_leg_green">🟢 Disponible</span>
-            <span class="inline-flex items-center gap-1" data-i18n="cal_leg_yellow">🟡 Partiel</span>
-            <span class="inline-flex items-center gap-1" data-i18n="cal_leg_red">🔴 Complet (100%)</span>
-            <span class="inline-flex items-center gap-1" data-i18n="cal_leg_grey">⚪ Fermé / Férié</span>
+          <div class="flex flex-wrap items-center justify-between gap-3 text-xs mb-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="inline-flex items-center gap-1" data-i18n="cal_leg_green">🟢 Disponible</span>
+              <span class="inline-flex items-center gap-1" data-i18n="cal_leg_yellow">🟡 Partiel</span>
+              <span class="inline-flex items-center gap-1" data-i18n="cal_leg_red">🔴 Complet (100%)</span>
+              <span class="inline-flex items-center gap-1" data-i18n="cal_leg_grey">⚪ Fermé / Férié</span>
+            </div>
+            <span class="text-[11px] font-semibold text-indigo-700" data-i18n="cal_click_hint">💡 Cliquez sur une date pour afficher ou ajouter ses chèques</span>
           </div>
 
-          <div id="calendarGrid45" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-            <!-- Populated by JS -->
+          <!-- REAL 7-COLUMN MONTHLY CALENDAR (MONDAY -> SUNDAY) -->
+          <div class="rounded-2xl border-2 border-slate-200 bg-white overflow-hidden shadow-sm">
+            <!-- 7-Day Weekday Header Row (Mon - Sun) -->
+            <div id="calendarWeekdayHeader" class="grid grid-cols-7 bg-slate-900 text-white text-[11px] sm:text-xs font-extrabold uppercase tracking-wider text-center border-b border-slate-800">
+              <div class="py-2.5 px-1 border-r border-slate-800" data-i18n="wd_mon">Lun</div>
+              <div class="py-2.5 px-1 border-r border-slate-800" data-i18n="wd_tue">Mar</div>
+              <div class="py-2.5 px-1 border-r border-slate-800" data-i18n="wd_wed">Mer</div>
+              <div class="py-2.5 px-1 border-r border-slate-800" data-i18n="wd_thu">Jeu</div>
+              <div class="py-2.5 px-1 border-r border-slate-800" data-i18n="wd_fri">Ven</div>
+              <div class="py-2.5 px-1 border-r border-slate-800 bg-slate-800/80 text-slate-300" data-i18n="wd_sat">Sam</div>
+              <div class="py-2.5 px-1 bg-slate-800/80 text-slate-300" data-i18n="wd_sun">Dim</div>
+            </div>
+
+            <!-- 7-Column Calendar Day Cells Grid -->
+            <div id="calendarGrid45" class="grid grid-cols-7 bg-slate-200 gap-px border-b border-slate-200">
+              <!-- Populated by JS with leading/trailing weekday alignment cells -->
+            </div>
+          </div>
+
+          <!-- POPUP MODAL WINDOW FOR SELECTED DAY CHEQUE DETAILS -->
+          <div id="selectedCalendarDayModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/65 backdrop-blur-xs p-3 sm:p-5 no-print" role="dialog" aria-modal="true" aria-labelledby="lblSelectedDayDate">
+            <div id="selectedCalendarDayPanel" class="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-indigo-200 bg-white p-4 sm:p-6 shadow-2xl space-y-4 transition-all">
+              <div class="flex items-start justify-between gap-3 border-b border-slate-200 pb-3.5">
+                <div>
+                  <div class="flex items-center flex-wrap gap-2">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-900" data-i18n="cal_selected_day_badge">Détails du jour sélectionné</span>
+                    <span id="lblSelectedDayWorkingStatus" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900">Jour ouvrable</span>
+                  </div>
+                  <h4 id="lblSelectedDayDate" class="text-lg sm:text-xl font-extrabold text-slate-900 font-mono mt-1.5">16/11/2026</h4>
+                </div>
+                <button
+                  type="button"
+                  id="btnCloseSelectedDayPopup"
+                  class="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 text-slate-700 font-extrabold text-sm transition cursor-pointer shrink-0"
+                  aria-label="Fermer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <!-- Selected Day 5-Metric Summary Strip -->
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <div class="text-[11px] text-slate-500 font-semibold" data-i18n="cal_day_metric_count">Nombre de chèques</div>
+                  <div id="lblSelectedDayChequeCount" class="text-sm sm:text-base font-extrabold text-slate-900 mt-0.5">0</div>
+                  <div id="lblSelectedDayChequeBreakdown" class="text-[10px] text-slate-500 font-medium mt-0.5">Aucun chèque sur cette date</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <div class="text-[11px] text-slate-500 font-semibold" data-i18n="cal_day_metric_total">Total programmé (Actif)</div>
+                  <div id="lblSelectedDayTotalScheduled" class="text-sm sm:text-base font-extrabold text-emerald-700 mt-0.5">0 DH</div>
+                  <div id="lblSelectedDayGrossTotalSub" class="text-[10px] text-slate-500 font-medium mt-0.5">100% comptabilisé dans le plafond</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <div class="text-[11px] text-slate-500 font-semibold" data-i18n="cal_day_metric_ceiling">Plafond journalier</div>
+                  <div id="lblSelectedDayCeiling" class="text-sm sm:text-base font-extrabold text-slate-800 mt-0.5">10 000 000 DH</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <div class="text-[11px] text-slate-500 font-semibold" data-i18n="cal_day_metric_remaining">Plafond disponible</div>
+                  <div id="lblSelectedDayRemaining" class="text-sm sm:text-base font-extrabold text-indigo-700 mt-0.5">10 000 000 DH</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1 bg-slate-50 rounded-xl p-3 border border-slate-200">
+                  <div class="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
+                    <span data-i18n="cal_day_metric_pct">Utilisation</span>
+                    <span id="lblSelectedDayPct" class="font-extrabold text-slate-900">0%</span>
+                  </div>
+                  <div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden mt-1.5">
+                    <div id="barSelectedDayProgress" class="h-full bg-emerald-600 transition-all duration-300" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Selected Day Cheques List or Empty State -->
+              <div id="selectedDayChequesList" class="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1">
+                <!-- Populated dynamically by renderSelectedCalendarDayPanel() -->
+              </div>
+
+              <!-- Popup Footer Actions -->
+              <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200">
+                <button type="button" id="btnCopySelectedDaySummary" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 transition cursor-pointer">
+                  <span>📋</span>
+                  <span data-i18n="cal_btn_copy_day_summary">Copier résumé du jour</span>
+                </button>
+                <div class="flex items-center gap-2">
+                  <button type="button" id="btnQuickAddChequeForSelectedDate" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition cursor-pointer">
+                    <span>+</span>
+                    <span data-i18n="cal_btn_add_for_date">Ajouter un chèque pour cette date</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2459,7 +2551,44 @@
         err_day_full_msg: 'La date du {date} a déjà atteint 100% du plafond journalier (Jour Rouge). Veuillez choisir une autre date disponible (prochain jour libre : {next}).',
         err_exceeds_day_msg: 'Le montant dépasse la capacité restante du {date} (Reste disponible : {rem}). Choisissez une autre date (ex: {next}).',
         perm_granted_msg: '✓ Autorisations activées (Notifications, Caméra & Stockage hors-ligne).',
-        status_expired: 'Expiré / Périmé'
+                status_expired: 'Expiré / Périmé',
+        cal_btn_today: "Aujourd'hui",
+        cal_click_hint: '💡 Cliquez sur une date pour afficher ou ajouter ses chèques',
+        cal_selected_day_badge: 'Détails du jour sélectionné',
+        cal_btn_copy_day_summary: 'Copier résumé du jour',
+        cal_btn_add_for_date: 'Ajouter un chèque pour cette date',
+        cal_day_metric_count: 'Nombre de chèques',
+        cal_day_metric_total: 'Total programmé (Actif)',
+        cal_day_metric_ceiling: 'Plafond journalier',
+        cal_day_metric_remaining: 'Plafond disponible',
+        cal_day_metric_pct: 'Utilisation',
+        cal_empty_day_title: 'Aucun chèque planifié pour ce jour.',
+        cal_empty_day_btn: '+ Ajouter un chèque pour cette date',
+        cal_counts_in_ceiling: '✓ Comptabilisé dans le plafond',
+        cal_excluded_from_ceiling: 'Hors plafond (0 DH)',
+        cal_summary_copied_toast: '✓ Résumé journalier copié dans le presse-papiers',
+        cal_today_badge: "Aujourd'hui",
+        wd_mon: 'Lun',
+        wd_tue: 'Mar',
+        wd_wed: 'Mer',
+        wd_thu: 'Jeu',
+        wd_fri: 'Ven',
+                wd_sat: 'Sam',
+        wd_sun: 'Dim',
+        cal_active_vs_excluded: '{active} actif(s) · {excluded} hors plafond',
+        cal_all_active_sub: 'Tous comptabilisés au plafond',
+        cal_no_cheques_sub: 'Aucun chèque sur cette date',
+        cal_gross_total_sub: 'Total brut (incl. annulés/expirés) : {gross}',
+        cal_active_only_sub: '100% comptabilisé dans le plafond',
+        cal_aria_day_summary: 'Date {date}, {status}, {count} chèque(s), montant comptabilisé au plafond {used}, plafond disponible {rem}',
+        cal_copy_header: 'RÉSUMÉ JOURNALIER',
+        cal_copy_total_cheques: 'Total chèques assignés',
+        cal_copy_active_cheques: 'Chèques actifs (comptabilisés)',
+        cal_copy_excluded_cheques: 'Chèques hors plafond (annulés/expirés)',
+        cal_copy_active_amount: 'Montant comptabilisé au plafond',
+        cal_copy_gross_amount: 'Montant total brut (tous statuts)',
+        cal_copy_daily_ceiling: 'Plafond journalier configuré',
+        cal_copy_remaining_ceiling: 'Plafond disponible restant'
       },
       ar: {
         btn_modify: 'تعديل',
@@ -2530,7 +2659,45 @@
         err_day_full_title: '⛔ اليوم ممتلئ (100%) — لا يمكن الإضافة',
         err_day_full_msg: 'تاريخ {date} وصل إلى 100% من السقف اليومي (يوم أحمر ممتلئ). يرجى اختيار تاريخ آخر متاح (أقرب يوم مفتوح: {next}).',
         err_exceeds_day_msg: 'المبلغ يتجاوز السقف المتبقي ليوم {date} (المتبقي: {rem}). اختر تاريخاً آخر (مثل: {next}).',
-        perm_granted_msg: '✓ تم تفعيل صلاحيات التطبيق (الإشعارات، الكاميرا والتخزين).'
+        perm_granted_msg: '✓ تم تفعيل صلاحيات التطبيق (الإشعارات، الكاميرا والتخزين).',
+        status_expired: 'منتهي الصلاحية',
+        cal_btn_today: 'اليوم',
+        cal_click_hint: '💡 اضغط على أي تاريخ لعرض الشيكات المبرمجة أو إضافة شيك',
+        cal_selected_day_badge: 'تفاصيل اليوم المحدد',
+        cal_btn_copy_day_summary: 'نسخ ملخص اليوم',
+        cal_btn_add_for_date: 'إضافة شيك لهذا التاريخ',
+        cal_day_metric_count: 'عدد الشيكات',
+        cal_day_metric_total: 'المجموع المبرمج (النشط)',
+        cal_day_metric_ceiling: 'السقف اليومي',
+        cal_day_metric_remaining: 'السقف المتبقي',
+        cal_day_metric_pct: 'نسبة الاستهلاك',
+        cal_empty_day_title: 'لا توجد شيكات مبرمجة لهذا اليوم.',
+        cal_empty_day_btn: '+ إضافة شيك لهذا التاريخ',
+        cal_counts_in_ceiling: '✓ محسوب ضمن السقف اليومي',
+        cal_excluded_from_ceiling: 'خارج السقف (0 درهم)',
+        cal_summary_copied_toast: '✓ تم نسخ ملخص اليوم إلى الحافظة',
+        cal_today_badge: 'اليوم',
+        wd_mon: 'الإثنين',
+        wd_tue: 'الثلاثاء',
+        wd_wed: 'الأربعاء',
+        wd_thu: 'الخميس',
+        wd_fri: 'الجمعة',
+                wd_sat: 'السبت',
+        wd_sun: 'الأحد',
+        cal_active_vs_excluded: '{active} نشط · {excluded} خارج السقف',
+        cal_all_active_sub: 'جميعها محسوبة ضمن السقف',
+        cal_no_cheques_sub: 'لا توجد شيكات في هذا التاريخ',
+        cal_gross_total_sub: 'الإجمالي الخام (شامل الملغاة/المنتهية): {gross}',
+        cal_active_only_sub: 'محسوب بالكامل ضمن السقف اليومي',
+        cal_aria_day_summary: 'التاريخ {date}، {status}، {count} شيكات، المبلغ المحسوب في السقف {used}، السقف المتبقي {rem}',
+        cal_copy_header: 'ملخص اليوم',
+        cal_copy_total_cheques: 'إجمالي الشيكات المسجلة',
+        cal_copy_active_cheques: 'الشيكات النشطة (المحسوبة في السقف)',
+        cal_copy_excluded_cheques: 'الشيكات خارج السقف (ملغاة/منتهية)',
+        cal_copy_active_amount: 'المبلغ المحسوب ضمن السقف اليومي',
+        cal_copy_gross_amount: 'المبلغ الإجمالي الخام (جميع الحالات)',
+        cal_copy_daily_ceiling: 'السقف اليومي المحدد',
+        cal_copy_remaining_ceiling: 'السقف المتبقي المتاح'
       },
       en: {
         btn_modify: 'Edit',
@@ -2602,7 +2769,44 @@
         err_day_full_msg: 'Date {date} has already reached 100% of the daily ceiling (Red Day). Please pick another available date (next open day: {next}).',
         err_exceeds_day_msg: 'Amount exceeds remaining capacity on {date} (Remaining: {rem}). Please choose another date (e.g. {next}).',
         perm_granted_msg: '✓ App permissions enabled (Notifications, Camera & Offline Storage).',
-        status_expired: 'Expired'
+                status_expired: 'Expired',
+        cal_btn_today: 'Today',
+        cal_click_hint: '💡 Click any date to view or add scheduled cheques',
+        cal_selected_day_badge: 'Selected Day Details',
+        cal_btn_copy_day_summary: 'Copy daily summary',
+        cal_btn_add_for_date: 'Add a cheque for this date',
+        cal_day_metric_count: 'Scheduled cheques',
+        cal_day_metric_total: 'Total scheduled (Active)',
+        cal_day_metric_ceiling: 'Daily ceiling',
+        cal_day_metric_remaining: 'Remaining ceiling',
+        cal_day_metric_pct: 'Ceiling used',
+        cal_empty_day_title: 'No cheques scheduled for this day.',
+        cal_empty_day_btn: '+ Add a cheque for this date',
+        cal_counts_in_ceiling: '✓ Counts toward daily ceiling',
+        cal_excluded_from_ceiling: 'Excluded from ceiling (0 DH)',
+        cal_summary_copied_toast: '✓ Daily summary copied to clipboard',
+        cal_today_badge: 'Today',
+        wd_mon: 'Mon',
+        wd_tue: 'Tue',
+        wd_wed: 'Wed',
+        wd_thu: 'Thu',
+        wd_fri: 'Fri',
+                wd_sat: 'Sat',
+        wd_sun: 'Sun',
+        cal_active_vs_excluded: '{active} active · {excluded} excluded',
+        cal_all_active_sub: 'All counting toward ceiling',
+        cal_no_cheques_sub: 'No cheques on this date',
+        cal_gross_total_sub: 'Gross total (incl. cancelled/expired): {gross}',
+        cal_active_only_sub: 'Counting toward daily ceiling',
+        cal_aria_day_summary: 'Date {date}, {status}, {count} cheque(s), amount counting toward ceiling {used}, remaining ceiling {rem}',
+        cal_copy_header: 'DAILY SUMMARY',
+        cal_copy_total_cheques: 'Total assigned cheques',
+        cal_copy_active_cheques: 'Active cheques (counting toward ceiling)',
+        cal_copy_excluded_cheques: 'Excluded cheques (cancelled/expired)',
+        cal_copy_active_amount: 'Amount counting toward daily ceiling',
+        cal_copy_gross_amount: 'Gross scheduled amount (all statuses)',
+        cal_copy_daily_ceiling: 'Configured daily ceiling',
+        cal_copy_remaining_ceiling: 'Remaining available ceiling'
       }
     };
     for (const k of ['fr', 'ar', 'en']) {
@@ -2631,6 +2835,7 @@
       isLocked: false,
       calendarViewYear: new Date().getFullYear(),
       calendarViewMonth: new Date().getMonth(),
+      selectedCalendarDate: null,
       holidays: [...DEFAULT_MOROCCAN_HOLIDAYS],
       operations: [],
       notificationSettings: {
@@ -3126,25 +3331,42 @@
       } catch (e) {}
 
       if (!intlSuccess) {
-        const ref2026Religious = [
-          { baseDate: '2026-03-20', label: 'Aïd Al-Fitr J1 — Estimé ±1j (عيد الفطر)' },
-          { baseDate: '2026-03-21', label: 'Aïd Al-Fitr J2 — Estimé ±1j (عيد الفطر)' },
-          { baseDate: '2026-05-27', label: 'Aïd Al-Adha J1 — Estimé ±1j (عيد الأضحى)' },
-          { baseDate: '2026-05-28', label: 'Aïd Al-Adha J2 — Estimé ±1j (عيد الأضحى)' },
-          { baseDate: '2026-06-17', label: '1er Moharram — Estimé ±1j (فاتح محرم)' },
-          { baseDate: '2026-08-26', label: 'Aïd Al-Mawlid — Estimé ±1j (عيد المولد النبوي)' }
-        ];
-        const shiftDays = Math.round((y - 2026) * -10.875);
-        for (const item of ref2026Religious) {
-          const d = parseYMD(item.baseDate);
-          d.setFullYear(y);
-          d.setDate(d.getDate() + shiftDays);
-          religiousForYear.push({
-            date: formatYMD(d),
-            label: item.label,
-            type: 'religious',
-            estimated: true
-          });
+        // Tabular Islamic Calendar Algorithm (30-year 10,631-day lunar cycle via Julian Day Number conversion)
+        function gregorianToHijriTabular(gYear, gMonth, gDay) {
+          const a = Math.floor((14 - gMonth) / 12);
+          const y1 = gYear + 4800 - a;
+          const m1 = gMonth + 12 * a - 3;
+          const jdn = gDay + Math.floor((153 * m1 + 2) / 5) + 365 * y1 + Math.floor(y1 / 4) - Math.floor(y1 / 100) + Math.floor(y1 / 400) - 32045;
+          const l = jdn - 1948440 + 10632;
+          const n = Math.floor((l - 1) / 10631);
+          const l2 = l - 10631 * n + 354;
+          const j = (Math.floor((10985 - l2) / 5316)) * (Math.floor((50 * l2) / 17719)) + (Math.floor(l2 / 5670)) * (Math.floor((43 * l2) / 15238));
+          const l3 = l2 - (Math.floor((30 - j) / 15)) * (Math.floor((17719 * j) / 50)) - (Math.floor(j / 16)) * (Math.floor((15238 * j) / 43)) + 29;
+          const hMonth = Math.floor((24 * l3) / 709);
+          const hDay = l3 - Math.floor((709 * hMonth) / 24);
+          const hYear = 30 * n + j - 30;
+          return { hYear, hMonth, hDay };
+        }
+        const cursor = new Date(y, 0, 1, 12, 0, 0);
+        while (cursor.getFullYear() === y) {
+          const { hMonth, hDay } = gregorianToHijriTabular(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
+          const ymd = formatYMD(cursor);
+          if (hMonth === 1 && hDay === 1) {
+            religiousForYear.push({ date: ymd, label: '1er Moharram — Estimé ±1j (فاتح محرم)', type: 'religious', estimated: true });
+          } else if (hMonth === 3 && hDay === 12) {
+            religiousForYear.push({ date: ymd, label: 'Aïd Al-Mawlid J1 — Estimé ±1j (عيد المولد النبوي)', type: 'religious', estimated: true });
+          } else if (hMonth === 3 && hDay === 13) {
+            religiousForYear.push({ date: ymd, label: 'Aïd Al-Mawlid J2 — Estimé ±1j (عيد المولد النبوي)', type: 'religious', estimated: true });
+          } else if (hMonth === 10 && hDay === 1) {
+            religiousForYear.push({ date: ymd, label: 'Aïd Al-Fitr J1 — Estimé ±1j (عيد الفطر)', type: 'religious', estimated: true });
+          } else if (hMonth === 10 && hDay === 2) {
+            religiousForYear.push({ date: ymd, label: 'Aïd Al-Fitr J2 — Estimé ±1j (عيد الفطر)', type: 'religious', estimated: true });
+          } else if (hMonth === 12 && hDay === 10) {
+            religiousForYear.push({ date: ymd, label: 'Aïd Al-Adha J1 — Estimé ±1j (عيد الأضحى)', type: 'religious', estimated: true });
+          } else if (hMonth === 12 && hDay === 11) {
+            religiousForYear.push({ date: ymd, label: 'Aïd Al-Adha J2 — Estimé ±1j (عيد الأضحى)', type: 'religious', estimated: true });
+          }
+          cursor.setDate(cursor.getDate() + 1);
         }
       }
       return [...fixedNational, ...religiousForYear].sort((a, b) => a.date.localeCompare(b.date));
@@ -3783,55 +4005,76 @@
       return { chosen: idbRecord, source: 'indexeddb', needsSyncToIdb: false, needsSyncToLs: tsIdb > tsLs };
     }
 
-    // Native Android Keystore / iOS Keychain Bridge (via Capacitor SecureStoragePlugin if available)
+    // Native Android Keystore (`SecureVaultKeystorePlugin.java`) & iOS Keychain (`SecureVaultKeychainPlugin.swift`) Bridge
+    // Supports both first-party `SecureVaultKeystore` and `capacitor-secure-storage-plugin` (`SecureStoragePlugin`).
     function getNativeSecureStoragePlugin() {
-      return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SecureStoragePlugin)
-        ? window.Capacitor.Plugins.SecureStoragePlugin
-        : null;
+      if (!window.Capacitor || !window.Capacitor.Plugins) return null;
+      return window.Capacitor.Plugins.SecureVaultKeystore || window.Capacitor.Plugins.SecureStoragePlugin || null;
     }
 
-    // Secure Key Management Architecture:
-    // 1. When PIN/Passphrase is enabled: DEK is wrapped with PBKDF2-SHA256 (210,000 iterations) + AES-256-GCM (`wrappedDekByPin` & `wrappedDekByRecovery`).
-    // 2. When no PIN is configured on Native Mobile (Android/iOS): DEK is stored in Android Keystore / iOS Keychain.
-    // 3. When no PIN is configured on Web/PWA: A non-extractable Web Crypto `CryptoKey` (`extractable: false`) is stored in IndexedDB `IDB_KEY_STORE`,
-    //    and any legacy plaintext hex key in localStorage (`pcm_device_dek_v3`) is migrated and deleted!
+    // Fail-Safe Key Management Architecture (Sections 4 & 5):
+    // NEVER generates an ephemeral in-memory key that disappears on restart.
+    // Every newly generated key MUST be verified as persisted and recoverable (via read-back check in Native Keystore/Keychain,
+    // IndexedDB `IDB_KEY_STORE`, or PIN/Recovery wrapped envelope) before allowing any encrypted data write.
+    let keyIsPersistedAndRecoverable = false;
+
     async function ensureSessionVaultDek() {
-      if (sessionVaultDekBytes && sessionVaultDekBytes.length === 32) {
+      if (sessionVaultDekBytes && sessionVaultDekBytes.length === 32 && keyIsPersistedAndRecoverable) {
         return sessionVaultDekBytes;
       }
-      if (sessionVaultCryptoKey) {
+      if (sessionVaultCryptoKey && keyIsPersistedAndRecoverable) {
         return sessionVaultCryptoKey;
       }
       if (state.pinHash) {
+        // When PIN is enabled, key is recoverable if wrappedDekByPin exists and DEK is currently unlocked in memory
+        if (sessionVaultDekBytes && sessionVaultDekBytes.length === 32 && state.wrappedDekByPin) {
+          keyIsPersistedAndRecoverable = true;
+          return sessionVaultDekBytes;
+        }
         return null; // Locked until user enters PIN/Passphrase or Recovery Key
       }
 
       assertWebCryptoAvailable();
 
-      // 1. Check Native Mobile Keystore / Keychain first
+      // 1. Native Mobile Hardware Keystore (AndroidKeyStore) / iOS Keychain (kSecAttrAccessibleWhenUnlockedThisDeviceOnly)
       const nativeSecure = getNativeSecureStoragePlugin();
       if (nativeSecure) {
         try {
-          const res = await nativeSecure.get({ key: 'pcm_native_master_dek_v4' });
-          if (res && res.value && res.value.length === 64) {
-            sessionVaultDekBytes = hexToBytes(res.value);
+          const existing = await nativeSecure.get({ key: 'pcm_native_master_dek_v4' });
+          if (existing && existing.value && /^[0-9a-fA-F]{64}$/.test(existing.value)) {
+            sessionVaultDekBytes = hexToBytes(existing.value);
+            keyIsPersistedAndRecoverable = true;
             return sessionVaultDekBytes;
           }
-        } catch (e) {}
-        sessionVaultDekBytes = generateRandomDekBytes();
+        } catch (getErr) {
+          // Key does not exist yet in native keystore; generate, store, and verify read-back
+        }
         try {
-          await nativeSecure.set({ key: 'pcm_native_master_dek_v4', value: bytesToHex(sessionVaultDekBytes) });
-        } catch (e) {}
-        return sessionVaultDekBytes;
+          const candidateDek = generateRandomDekBytes();
+          const candidateHex = bytesToHex(candidateDek);
+          await nativeSecure.set({ key: 'pcm_native_master_dek_v4', value: candidateHex });
+          const verifyReadBack = await nativeSecure.get({ key: 'pcm_native_master_dek_v4' });
+          if (!verifyReadBack || verifyReadBack.value !== candidateHex) {
+            throw new Error('Échec de vérification en relecture du Keystore/Keychain natif.');
+          }
+          sessionVaultDekBytes = candidateDek;
+          keyIsPersistedAndRecoverable = true;
+          return sessionVaultDekBytes;
+        } catch (nativeErr) {
+          const msg = '⛔ Erreur critique du Keystore/Keychain matériel natif : impossible de sécuriser la clé de chiffrement.';
+          showSecurityOrStorageWarningBanner(msg, 'error');
+          throw new Error(msg);
+        }
       }
 
-      // 2. Check for legacy plaintext DEK (`pcm_device_dek_v3` or `device_unwrapped_dek`) to migrate legacy encrypted vault seamlessly
+      // 2. Check for legacy plaintext DEK (`pcm_device_dek_v3` or `device_unwrapped_dek`) to migrate legacy encrypted vault
       let legacyDekBytes = null;
       const legacyLsHex = safeStorageGet('pcm_device_dek_v3');
       if (legacyLsHex && /^[0-9a-fA-F]{64}$/.test(legacyLsHex)) {
         legacyDekBytes = hexToBytes(legacyLsHex);
       }
 
+      // 3. Browser/PWA Non-Extractable CryptoKey in IndexedDB (`IDB_KEY_STORE`) with Mandatory Read-Back Verification
       try {
         const db = await openIndexedDB();
         const existingKeyRec = await new Promise((resolve) => {
@@ -3842,6 +4085,7 @@
         });
         if (existingKeyRec && existingKeyRec.cryptoKey) {
           sessionVaultCryptoKey = existingKeyRec.cryptoKey;
+          keyIsPersistedAndRecoverable = true;
           safeStorageRemove('pcm_device_dek_v3');
           return sessionVaultCryptoKey;
         }
@@ -3858,7 +4102,6 @@
           }
         }
 
-        // Import or generate non-extractable Web Crypto CryptoKey (`extractable: false`)
         let nonExtractableKey;
         if (legacyDekBytes) {
           nonExtractableKey = await window.crypto.subtle.importKey(
@@ -3876,25 +4119,45 @@
           );
         }
 
-        await new Promise((resolve) => {
+        const writeOk = await new Promise((resolve) => {
           const tx = db.transaction(IDB_KEY_STORE, 'readwrite');
           const store = tx.objectStore(IDB_KEY_STORE);
           store.put({ id: 'device_non_extractable_crypto_key', cryptoKey: nonExtractableKey, createdAt: new Date().toISOString() });
           store.delete('device_unwrapped_dek');
           tx.oncomplete = () => resolve(true);
           tx.onerror = () => resolve(false);
+          tx.onabort = () => resolve(false);
         });
+
+        if (!writeOk) {
+          throw new Error('Échec de transaction IndexedDB lors de la sauvegarde de la clé CryptoKey.');
+        }
+
+        // Mandatory Read-Back Check: confirm the CryptoKey is genuinely stored in IndexedDB and recoverable on next restart
+        const readBackRec = await new Promise((resolve) => {
+          const tx = db.transaction(IDB_KEY_STORE, 'readonly');
+          const r = tx.objectStore(IDB_KEY_STORE).get('device_non_extractable_crypto_key');
+          r.onsuccess = () => resolve(r.result || null);
+          r.onerror = () => resolve(null);
+        });
+
+        if (!readBackRec || !readBackRec.cryptoKey) {
+          throw new Error('La clé CryptoKey n’a pas pu être relue depuis IndexedDB.');
+        }
+
         safeStorageRemove('pcm_device_dek_v3');
-        sessionVaultCryptoKey = nonExtractableKey;
+        sessionVaultCryptoKey = readBackRec.cryptoKey;
+        keyIsPersistedAndRecoverable = true;
         return sessionVaultCryptoKey;
       } catch (idbErr) {
-        // Deliberate fallback when IndexedDB is unavailable in browser context
-        if (legacyDekBytes) {
-          sessionVaultDekBytes = legacyDekBytes;
-          return sessionVaultDekBytes;
-        }
-        sessionVaultDekBytes = generateRandomDekBytes();
-        return sessionVaultDekBytes;
+        // NEVER silently generate an ephemeral RAM key that will disappear after the session!
+        sessionVaultDekBytes = null;
+        sessionVaultCryptoKey = null;
+        keyIsPersistedAndRecoverable = false;
+        state.persistenceStatus = 'UNAVAILABLE_VOLATILE';
+        const errMsg = '⛔ Stockage sécurisé des clés (IndexedDB / Keystore) indisponible dans ce contexte : enregistrement bloqué pour éviter toute perte de données chiffrées après redémarrage.';
+        showSecurityOrStorageWarningBanner(errMsg, 'error');
+        throw new Error(errMsg);
       }
     }
 
@@ -3906,6 +4169,7 @@
       const newDek = generateRandomDekBytes();
       sessionVaultDekBytes = newDek;
       sessionVaultCryptoKey = await importDekAsCryptoKey(newDek, false);
+      keyIsPersistedAndRecoverable = true;
       return newDek;
     }
 
@@ -4142,6 +4406,7 @@
     async function decryptAndHydrateVaultIntoState(dekOrCryptoKey) {
       if (!dekOrCryptoKey || !state.encryptedVault) return false;
       const decryptedVault = await decryptVaultWithDek(state.encryptedVault, dekOrCryptoKey);
+      keyIsPersistedAndRecoverable = true;
       if (dekOrCryptoKey instanceof Uint8Array) {
         sessionVaultDekBytes = dekOrCryptoKey;
         sessionVaultCryptoKey = await importDekAsCryptoKey(dekOrCryptoKey, false);
@@ -5429,8 +5694,8 @@
                   <p class="text-xs mt-1">Renseignez le bénéficiaire, la banque, le montant en DH et l’échéance (7j à 60j). Joignez une photo depuis la caméra ou la galerie avec rotation 90° (↻) et recadrage au format chèque (✂️).</p>
                 </div>
                 <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <h5 class="font-bold text-slate-900">4. Calendrier Mensuel & Codes Couleurs</h5>
-                  <p class="text-xs mt-1">🟢 <strong>Vert</strong> : Disponible · 🟡 <strong>Jaune</strong> : Partiellement engagé · 🔴 <strong>Rouge</strong> : Plafond atteint (100%) · ⚪ <strong>Gris</strong> : Samedi, dimanche ou jour férié marocain.</p>
+                  <h5 class="font-bold text-slate-900">4. Calendrier Mensuel Interactif & Détails du Jour</h5>
+                  <p class="text-xs mt-1">Cliquez sur n’importe quelle date pour voir ses chèques programmés, ouvrir un chèque, ajouter un chèque pour cette date (+), copier le résumé journalier (📋) ou revenir à <strong>Aujourd’hui</strong>.</p>
                 </div>
                 <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
                   <h5 class="font-bold text-slate-900">5. Sécurité PIN, Sauvegardes & Notifications</h5>
@@ -5507,12 +5772,32 @@
       const mapByDate = {};
       const bankTotals = {};
 
+      const allChequesByDate = {};
       for (const op of state.operations) {
         for (let idx = 0; idx < op.tranches.length; idx++) {
           const tr = op.tranches[idx];
           totalCheques++;
           const c = toCentimes(tr.montant);
-          if (tr.status !== 'cancelled') {
+          const itemRecord = {
+            opId: op.id,
+            trIdx: idx,
+            beneficiaire: op.beneficiaire,
+            banque: op.banque,
+            numCheque: tr.numCheque,
+            montant: tr.montant,
+            date: tr.date,
+            status: tr.status || 'scheduled',
+            countsTowardCeiling: !isInactiveChequeStatus(tr.status),
+            echeanceDays: op.echeanceDays,
+            dateSaisie: op.dateSaisie,
+            explicationDate: tr.explicationDate
+          };
+          if (!allChequesByDate[tr.date]) {
+            allChequesByDate[tr.date] = [];
+          }
+          allChequesByDate[tr.date].push(itemRecord);
+
+          if (!isInactiveChequeStatus(tr.status)) {
             totalEngageCentimes += c;
             bankTotals[op.banque] = (bankTotals[op.banque] || 0) + fromCentimes(c);
             if (!mapByDate[tr.date]) {
@@ -5525,21 +5810,12 @@
             }
             mapByDate[tr.date].totalCentimes += c;
             mapByDate[tr.date].total = fromCentimes(mapByDate[tr.date].totalCentimes);
-            mapByDate[tr.date].items.push({
-              opId: op.id,
-              trIdx: idx,
-              beneficiaire: op.beneficiaire,
-              banque: op.banque,
-              numCheque: tr.numCheque,
-              montant: tr.montant,
-              status: tr.status || 'scheduled',
-              echeanceDays: op.echeanceDays,
-              dateSaisie: op.dateSaisie,
-              explicationDate: tr.explicationDate
-            });
+            mapByDate[tr.date].items.push(itemRecord);
           }
         }
       }
+      window._lastAllChequesByDate = allChequesByDate;
+      window._lastMapByDate = mapByDate;
 
       const totalEngage = fromCentimes(totalEngageCentimes);
       const activeDates = Object.keys(mapByDate).sort();
@@ -5743,53 +6019,409 @@
       const monthLabel = document.getElementById('lblCalCurrentMonthYear');
       if (!grid) return;
 
+      const todayYMD = getTodayYMD();
+      if (!state.selectedCalendarDate || !isValidYMD(state.selectedCalendarDate)) {
+        state.selectedCalendarDate = todayYMD;
+      }
+
       if (monthLabel) {
         const mmNum = String(state.calendarViewMonth + 1).padStart(2, '0');
         monthLabel.textContent = `${mmNum} / ${state.calendarViewYear}`;
       }
 
+      const allChequesByDate = window._lastAllChequesByDate || {};
+      const firstDayOfMonth = new Date(state.calendarViewYear, state.calendarViewMonth, 1, 12, 0, 0);
       const daysInMonth = new Date(state.calendarViewYear, state.calendarViewMonth + 1, 0).getDate();
+      // Monday-first weekday offset: Monday=0, Tuesday=1, ..., Sunday=6
+      const leadingEmptyDays = (firstDayOfMonth.getDay() + 6) % 7;
       const cells = [];
+
+      // Leading empty cells for previous month padding so Day 1 aligns under its true weekday column
+      for (let pad = 0; pad < leadingEmptyDays; pad++) {
+        cells.push(`
+          <div class="min-h-[82px] sm:min-h-[104px] bg-slate-100/75 p-1.5 sm:p-2 select-none" aria-hidden="true"></div>
+        `);
+      }
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dateObj = new Date(state.calendarViewYear, state.calendarViewMonth, d, 12, 0, 0);
         const dStr = formatYMD(dateObj);
+        const dayNumStr = String(d).padStart(2, '0');
         const reason = isNonWorkingDayReason(dStr);
         const used = mapByDate[dStr] ? mapByDate[dStr].total : 0;
+        const allItems = allChequesByDate[dStr] || [];
+        const chequeCount = allItems.length;
         const reste = Math.max(0, state.plafondJournalier - used);
-        const pct = state.plafondJournalier > 0 ? Math.round((used / state.plafondJournalier) * 100) : 0;
+        const pct = state.plafondJournalier > 0 ? Math.min(100, Math.round((used / state.plafondJournalier) * 100)) : 0;
+        const isSelected = dStr === state.selectedCalendarDate;
+        const isToday = dStr === todayYMD;
 
-        let cardStyle = 'bg-emerald-50/70 border-emerald-200 text-slate-800';
-        let statusLabel = `${t('cal_dispo')} : ${formatNumberSpaces(reste)} DH`;
+        let cellBg = 'bg-white hover:bg-emerald-50/60 text-slate-800';
+        let dotColor = 'bg-emerald-500';
+        let barColor = 'bg-emerald-500';
+        let statusLabel = `${formatNumberSpaces(reste)} DH`;
 
         const holObj = getHolidayObject(dStr);
         if (holObj && holObj.estimated) {
-          cardStyle = 'bg-amber-100/90 border-2 border-dashed border-amber-500 text-amber-950';
-          statusLabel = `⚠️ Férié Estimé (±1j)`;
+          cellBg = 'bg-amber-50/95 hover:bg-amber-100/80 text-amber-950';
+          dotColor = 'bg-amber-500';
+          barColor = 'bg-amber-500';
+          statusLabel = `⚠️ Férié ±1j`;
         } else if (reason) {
-          cardStyle = 'bg-slate-100 border-slate-300 text-slate-400 opacity-85';
-          statusLabel = '⚪ —';
+          cellBg = 'bg-slate-100/90 hover:bg-slate-200/70 text-slate-400';
+          dotColor = 'bg-slate-300';
+          barColor = 'bg-slate-300';
+          statusLabel = holObj ? 'Férié' : 'Fermé';
         } else if (pct >= 100) {
-          cardStyle = 'bg-rose-100 border-2 border-rose-500 text-rose-950';
-          statusLabel = `🔴 ${t('cal_full')} (${formatNumberSpaces(used)} DH)`;
+          cellBg = 'bg-rose-50 hover:bg-rose-100/80 text-rose-950';
+          dotColor = 'bg-rose-600';
+          barColor = 'bg-rose-600';
+          statusLabel = `🔴 100%`;
         } else if (used > 0) {
-          cardStyle = 'bg-amber-50 border-amber-400 text-amber-950';
-          statusLabel = `🟡 ${pct}% · ${formatNumberSpaces(reste)} DH`;
+          cellBg = 'bg-amber-50/70 hover:bg-amber-100/60 text-amber-950';
+          dotColor = 'bg-amber-500';
+          barColor = 'bg-amber-500';
+          statusLabel = `🟡 ${pct}%`;
         }
 
+        const selectedStyle = isSelected
+          ? 'ring-3 ring-inset ring-indigo-600 bg-indigo-50/70 z-10 shadow-inner'
+          : 'focus:outline-none focus:ring-3 focus:ring-inset focus:ring-indigo-600';
+
+        const dayBadgeClass = isToday
+          ? 'w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center font-extrabold text-xs sm:text-sm shadow-2xs'
+          : isSelected
+            ? 'w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-indigo-900 text-white flex items-center justify-center font-extrabold text-xs sm:text-sm'
+            : 'font-extrabold text-xs sm:text-base text-slate-900';
+
+        const ariaLabelStr = t('cal_aria_day_summary')
+          .replace('{date}', formatNumericDMY(dStr))
+          .replace('{status}', reason || statusLabel)
+          .replace('{count}', String(chequeCount))
+          .replace('{used}', formatDH(used))
+          .replace('{rem}', formatDH(reste));
+
         cells.push(`
-          <div data-cal-date="${escapeHtml(dStr)}" data-cal-full="${pct >= 100 ? '1' : '0'}" class="rounded-xl border p-2.5 text-xs flex flex-col justify-between cursor-pointer transition-all ${cardStyle}">
-            <div class="flex items-center justify-between font-extrabold font-mono text-sm">
-              <span>${escapeHtml(formatNumericDMY(dStr))}</span>
-              ${!reason && used > 0 ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/90 font-extrabold">${pct}%</span>` : ''}
+          <button
+            type="button"
+            data-cal-date="${escapeHtml(dStr)}"
+            data-cal-full="${pct >= 100 ? '1' : '0'}"
+            data-cal-selected="${isSelected ? '1' : '0'}"
+            data-cal-count="${chequeCount}"
+            aria-selected="${isSelected ? 'true' : 'false'}"
+            aria-pressed="${isSelected ? 'true' : 'false'}"
+            aria-label="${escapeHtml(ariaLabelStr)}"
+            title="${escapeHtml(formatNumericDMY(dStr))} — ${escapeHtml(statusLabel)}"
+            class="w-full text-left min-h-[82px] sm:min-h-[104px] p-1.5 sm:p-2.5 flex flex-col justify-between cursor-pointer transition-all relative ${cellBg} ${selectedStyle}"
+          >
+            <!-- Top Row: Day Number + Cheque Count Badge -->
+            <div class="flex items-start justify-between gap-1 w-full">
+              <div class="flex flex-col items-start">
+                <span class="font-mono ${dayBadgeClass}">${dayNumStr}</span>
+                <span class="hidden sm:inline text-[9px] font-mono text-slate-400 mt-0.5">${escapeHtml(formatNumericDMY(dStr))}</span>
+              </div>
+              <div class="flex flex-col items-end gap-1">
+                ${chequeCount > 0 ? `<span class="cal-cheque-count-badge text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-slate-900 text-white font-extrabold leading-none">${chequeCount} chq.</span>` : `<span class="w-2 h-2 rounded-full ${dotColor}"></span>`}
+                ${isToday ? `<span class="hidden md:inline text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold leading-none">${escapeHtml(t('cal_today_badge'))}</span>` : ''}
+              </div>
             </div>
-            <div class="mt-2 text-[11px] font-bold truncate" title="${escapeHtml(statusLabel)}">
-              ${escapeHtml(statusLabel)}
+
+            <!-- Bottom Row: Status / Ceiling Bar -->
+            <div class="mt-1.5 space-y-1 w-full">
+              <div class="text-[10px] sm:text-[11px] font-bold truncate leading-tight">
+                ${escapeHtml(statusLabel)}
+              </div>
+              ${!reason ? `
+                <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div class="h-full ${barColor}" style="width: ${pct}%"></div>
+                </div>
+              ` : ''}
             </div>
-          </div>
+          </button>
         `);
       }
+
+      // Trailing empty cells to complete the final 7-day row of the month
+      const totalCellsSoFar = leadingEmptyDays + daysInMonth;
+      const trailingEmptyDays = (7 - (totalCellsSoFar % 7)) % 7;
+      for (let tPad = 0; tPad < trailingEmptyDays; tPad++) {
+        cells.push(`
+          <div class="min-h-[82px] sm:min-h-[104px] bg-slate-100/75 p-1.5 sm:p-2 select-none" aria-hidden="true"></div>
+        `);
+      }
+
       grid.innerHTML = cells.join('');
+      renderSelectedCalendarDayPanel(mapByDate, allChequesByDate);
+    }
+
+    function renderSelectedCalendarDayPanel(mapByDate = window._lastMapByDate || {}, allChequesByDate = window._lastAllChequesByDate || {}) {
+      const panel = document.getElementById('selectedCalendarDayPanel');
+      if (!panel) return;
+
+      const dStr = (state.selectedCalendarDate && isValidYMD(state.selectedCalendarDate))
+        ? state.selectedCalendarDate
+        : getTodayYMD();
+      state.selectedCalendarDate = dStr;
+
+      const allItems = allChequesByDate[dStr] || [];
+      const activeUsedCentimes = getScheduledCentimesForDate(dStr);
+      const activeUsedDH = fromCentimes(activeUsedCentimes);
+      const plafondCentimes = toCentimes(state.plafondJournalier);
+      const remainingDH = fromCentimes(Math.max(0, plafondCentimes - activeUsedCentimes));
+      const pct = plafondCentimes > 0 ? Math.min(100, Math.round((activeUsedCentimes / plafondCentimes) * 100)) : 0;
+      const nonWorkingReason = isNonWorkingDayReason(dStr);
+
+      const dateEl = document.getElementById('lblSelectedDayDate');
+      if (dateEl) dateEl.textContent = `${formatNumericDMY(dStr)} (${dStr})`;
+
+      const statusBadgeEl = document.getElementById('lblSelectedDayWorkingStatus');
+      if (statusBadgeEl) {
+        if (nonWorkingReason) {
+          statusBadgeEl.textContent = `⚪ ${nonWorkingReason}`;
+          statusBadgeEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700';
+        } else if (pct >= 100) {
+          statusBadgeEl.textContent = `🔴 ${t('cal_full')} (100%)`;
+          statusBadgeEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300';
+        } else if (activeUsedCentimes > 0) {
+          statusBadgeEl.textContent = `🟡 Jour ouvrable (${pct}% utilisé)`;
+          statusBadgeEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300';
+        } else {
+          statusBadgeEl.textContent = `🟢 Jour ouvrable disponible`;
+          statusBadgeEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300';
+        }
+      }
+
+      const countEl = document.getElementById('lblSelectedDayChequeCount');
+      const countBreakdownEl = document.getElementById('lblSelectedDayChequeBreakdown');
+      const activeCount = allItems.filter(it => it.countsTowardCeiling).length;
+      const excludedCount = allItems.length - activeCount;
+      const grossTotalCentimes = allItems.reduce((acc, it) => acc + toCentimes(it.montant), 0);
+      const grossTotalDH = fromCentimes(grossTotalCentimes);
+
+      if (countEl) {
+        countEl.textContent = String(allItems.length);
+      }
+      if (countBreakdownEl) {
+        if (allItems.length === 0) {
+          countBreakdownEl.textContent = t('cal_no_cheques_sub');
+        } else if (excludedCount > 0) {
+          countBreakdownEl.textContent = t('cal_active_vs_excluded')
+            .replace('{active}', String(activeCount))
+            .replace('{excluded}', String(excludedCount));
+        } else {
+          countBreakdownEl.textContent = t('cal_all_active_sub');
+        }
+      }
+
+      const totalEl = document.getElementById('lblSelectedDayTotalScheduled');
+      const grossSubEl = document.getElementById('lblSelectedDayGrossTotalSub');
+      if (totalEl) totalEl.textContent = formatDH(activeUsedDH);
+      if (grossSubEl) {
+        if (excludedCount > 0) {
+          grossSubEl.textContent = t('cal_gross_total_sub').replace('{gross}', formatDH(grossTotalDH));
+        } else {
+          grossSubEl.textContent = t('cal_active_only_sub');
+        }
+      }
+
+      const ceilEl = document.getElementById('lblSelectedDayCeiling');
+      if (ceilEl) ceilEl.textContent = formatDH(state.plafondJournalier);
+
+      const remEl = document.getElementById('lblSelectedDayRemaining');
+      if (remEl) remEl.textContent = formatDH(remainingDH);
+
+      const pctEl = document.getElementById('lblSelectedDayPct');
+      if (pctEl) pctEl.textContent = `${pct}%`;
+
+      const barEl = document.getElementById('barSelectedDayProgress');
+      if (barEl) {
+        barEl.style.width = `${pct}%`;
+        barEl.className = `h-full transition-all duration-300 ${pct >= 100 ? 'bg-rose-600' : pct >= 75 ? 'bg-amber-500' : 'bg-emerald-600'}`;
+      }
+
+      const quickAddBtn = document.getElementById('btnQuickAddChequeForSelectedDate');
+      if (quickAddBtn) {
+        quickAddBtn.setAttribute('data-quick-add-date', dStr);
+      }
+
+      const listContainer = document.getElementById('selectedDayChequesList');
+      if (!listContainer) return;
+
+      if (allItems.length === 0) {
+        listContainer.innerHTML = `
+          <div class="text-center py-7 px-4 rounded-xl bg-white border border-dashed border-slate-300 space-y-2.5">
+            <p class="text-xs sm:text-sm font-bold text-slate-700">${escapeHtml(t('cal_empty_day_title'))}</p>
+            <div>
+              <button
+                type="button"
+                id="btnEmptyStateAddChequeForDate"
+                data-quick-add-date="${escapeHtml(dStr)}"
+                class="btn-quick-add-for-date inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition cursor-pointer"
+              >
+                ${escapeHtml(t('cal_empty_day_btn'))}
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      listContainer.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          ${allItems.map(item => {
+            const st = getStatusBadgeInfo(item.status, dStr);
+            const ceilingNote = item.countsTowardCeiling
+              ? `<span class="text-[10px] font-bold text-emerald-700">${escapeHtml(t('cal_counts_in_ceiling'))}</span>`
+              : `<span class="text-[10px] font-bold text-slate-500">${escapeHtml(t('cal_excluded_from_ceiling'))}</span>`;
+            return `
+              <div
+                data-edit-cheque-op="${escapeHtml(item.opId)}"
+                data-edit-cheque-idx="${item.trIdx}"
+                class="selected-day-cheque-item btn-edit-single-cheque bg-white hover:bg-indigo-50/40 rounded-xl p-3.5 border border-slate-200 hover:border-indigo-300 flex flex-col justify-between text-xs shadow-2xs gap-2 cursor-pointer transition"
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <div class="font-extrabold text-slate-900 text-xs sm:text-sm">${escapeHtml(item.beneficiaire || 'Bénéficiaire')}</div>
+                    <div class="text-slate-600 mt-0.5">
+                      ${escapeHtml(item.banque)} · <span class="font-mono font-bold text-slate-800">${escapeHtml(item.numCheque || '—')}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 font-mono mt-0.5">
+                      Échéance : ${escapeHtml(formatNumericDMY(item.date))}
+                    </div>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <div class="font-extrabold text-sm sm:text-base ${item.countsTowardCeiling ? 'text-emerald-700' : 'text-slate-400 line-through'}">${formatDH(item.montant)}</div>
+                    ${ceilingNote}
+                  </div>
+                </div>
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${st.cls}">${escapeHtml(st.label)}</span>
+                  <span class="text-[11px] font-extrabold text-indigo-700 hover:underline">
+                    Détails / Modifier →
+                  </span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function openSelectedDayPopupModal() {
+      const modalEl = document.getElementById('selectedCalendarDayModal');
+      if (modalEl) {
+        modalEl.classList.remove('hidden');
+        modalEl.classList.add('flex');
+        const closeBtn = document.getElementById('btnCloseSelectedDayPopup');
+        if (closeBtn) closeBtn.focus();
+      }
+    }
+
+    function closeSelectedDayPopupModal() {
+      const modalEl = document.getElementById('selectedCalendarDayModal');
+      if (modalEl && !modalEl.classList.contains('hidden')) {
+        modalEl.classList.add('hidden');
+        modalEl.classList.remove('flex');
+        if (state.selectedCalendarDate) {
+          const calBtn = document.querySelector(`button[data-cal-date="${state.selectedCalendarDate}"]`);
+          if (calBtn) calBtn.focus();
+        }
+      }
+    }
+
+    function selectCalendarDateAndShowDetails(dStr, openPopup = false) {
+      if (!isValidYMD(dStr)) return;
+      const parts = dStr.split('-').map(Number);
+      state.calendarViewYear = parts[0];
+      state.calendarViewMonth = parts[1] - 1;
+      state.selectedCalendarDate = dStr;
+      render45DayCalendar(window._lastMapByDate || {});
+      if (openPopup) {
+        openSelectedDayPopupModal();
+      }
+    }
+
+    function quickAddChequeForSelectedDate(dStr) {
+      const targetDate = isValidYMD(dStr) ? dStr : (state.selectedCalendarDate || getTodayYMD());
+      const usedCentimes = getScheduledCentimesForDate(targetDate);
+      const plafondCentimes = toCentimes(state.plafondJournalier);
+      if (usedCentimes >= plafondCentimes) {
+        const nextOpen = findNextOpenBusinessDayForAmount(addCalendarDays(targetDate, 1), 1000);
+        showToast(t('err_day_full_msg').replace('{date}', formatNumericDMY(targetDate)).replace('{next}', formatNumericDMY(nextOpen)));
+        return false;
+      }
+      closeSelectedDayPopupModal();
+      // Open the existing primary cheque creation form (#tab-saisie) with the selected date prefilled and editable
+      switchTab('tab-saisie');
+      const dateInput = document.getElementById('inputDateSaisie');
+      if (dateInput) {
+        dateInput.value = targetDate;
+      }
+      state.selectedEcheance = 0;
+      document.querySelectorAll('.btn-ech').forEach(b => {
+        b.className = 'btn-ech rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-bold text-sm py-2 transition';
+      });
+      updateLiveSimulationAndPreview();
+      const benInput = document.getElementById('inputBeneficiaire');
+      if (benInput) benInput.focus();
+      showToast(`📅 Date ${formatNumericDMY(targetDate)} pré-remplie dans le formulaire de saisie`);
+      return true;
+    }
+
+    async function copySelectedDaySummaryToClipboard() {
+      const dStr = state.selectedCalendarDate || getTodayYMD();
+      const allItems = (window._lastAllChequesByDate && window._lastAllChequesByDate[dStr]) || [];
+      const activeCount = allItems.filter(it => it.countsTowardCeiling).length;
+      const excludedCount = allItems.length - activeCount;
+      const activeUsedCentimes = getScheduledCentimesForDate(dStr);
+      const activeUsedDH = fromCentimes(activeUsedCentimes);
+      const grossTotalCentimes = allItems.reduce((acc, it) => acc + toCentimes(it.montant), 0);
+      const grossTotalDH = fromCentimes(grossTotalCentimes);
+      const plafondCentimes = toCentimes(state.plafondJournalier);
+      const remainingDH = fromCentimes(Math.max(0, plafondCentimes - activeUsedCentimes));
+      const pct = plafondCentimes > 0 ? Math.min(100, Math.round((activeUsedCentimes / plafondCentimes) * 100)) : 0;
+
+      const lines = [
+        `📅 *${t('cal_copy_header')} — ${formatNumericDMY(dStr)} (${dStr})*`,
+        `• ${t('cal_copy_total_cheques')} : ${allItems.length} (${t('cal_copy_active_cheques')} : ${activeCount} | ${t('cal_copy_excluded_cheques')} : ${excludedCount})`,
+        `• ${t('cal_copy_active_amount')} : ${formatDH(activeUsedDH)} (${pct}%)`,
+        ...(excludedCount > 0 ? [`• ${t('cal_copy_gross_amount')} : ${formatDH(grossTotalDH)}`] : []),
+        `• ${t('cal_copy_daily_ceiling')} : ${formatDH(state.plafondJournalier)}`,
+        `• ${t('cal_copy_remaining_ceiling')} : ${formatDH(remainingDH)}`
+      ];
+      if (allItems.length > 0) {
+        lines.push(`--------------------------------`);
+        allItems.forEach((it, i) => {
+          const stLabel = getStatusBadgeInfo(it.status, dStr).label;
+          const ceilingTag = it.countsTowardCeiling ? t('cal_counts_in_ceiling') : t('cal_excluded_from_ceiling');
+          lines.push(`${i + 1}. ${it.beneficiaire} (${it.banque}) — N° ${it.numCheque} : ${formatDH(it.montant)} [${stLabel} · ${ceilingTag}]`);
+        });
+      }
+      const summaryText = lines.join('\n');
+      window._lastCopiedDailySummaryText = summaryText;
+
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(summaryText);
+          copied = true;
+        }
+      } catch (e) {}
+
+      if (!copied) {
+        const tempArea = document.createElement('textarea');
+        tempArea.value = summaryText;
+        document.body.appendChild(tempArea);
+        tempArea.select();
+        try {
+          document.execCommand('copy');
+          copied = true;
+        } catch (err) {}
+        document.body.removeChild(tempArea);
+      }
+
+      showToast(t('cal_summary_copied_toast'));
+      return summaryText;
     }
 
     function renderFilteredChequesTab() {
@@ -6674,21 +7306,14 @@
         const calCell = e.target.closest('[data-cal-date]');
         if (calCell) {
           const dStr = calCell.getAttribute('data-cal-date');
-          if (calCell.getAttribute('data-cal-full') === '1') {
-            let nextOpen = addCalendarDays(dStr, 1);
-            let g = 0;
-            while (g < 120 && (!isBusinessDay(nextOpen) || getScheduledCentimesForDate(nextOpen) >= toCentimes(state.plafondJournalier))) {
-              nextOpen = addCalendarDays(nextOpen, 1);
-              g++;
-            }
-            showToast(t('err_day_full_msg').replace('{date}', formatNumericDMY(dStr)).replace('{next}', formatNumericDMY(nextOpen)));
-          }
-          const dayCard = document.querySelector(`[data-planning-date="${dStr}"]`);
-          if (dayCard) {
-            dayCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            dayCard.classList.add('ring-4', 'ring-indigo-500');
-            setTimeout(() => dayCard.classList.remove('ring-4', 'ring-indigo-500'), 3000);
-          }
+          selectCalendarDateAndShowDetails(dStr, true);
+          return;
+        }
+        const quickAddDateBtn = e.target.closest('.btn-quick-add-for-date');
+        if (quickAddDateBtn) {
+          const dStr = quickAddDateBtn.getAttribute('data-quick-add-date') || state.selectedCalendarDate || getTodayYMD();
+          quickAddChequeForSelectedDate(dStr);
+          return;
         }
       });
 
@@ -6941,7 +7566,7 @@
         renderFilteredChequesTab();
       });
 
-      // Calendar Month/Year Navigator
+      // Calendar Month/Year Navigator + Today + Quick-Add + Copy Daily Summary
       document.getElementById('btnCalPrevMonth')?.addEventListener('click', () => {
         state.calendarViewMonth--;
         if (state.calendarViewMonth < 0) {
@@ -6957,6 +7582,50 @@
           state.calendarViewYear++;
         }
         renderKPIsAndAllViews();
+      });
+      document.getElementById('btnCalGoToday')?.addEventListener('click', () => {
+        const todayStr = getTodayYMD();
+        selectCalendarDateAndShowDetails(todayStr, true);
+        showToast(`📅 Calendrier centré sur aujourd’hui (${formatNumericDMY(todayStr)})`);
+      });
+      document.getElementById('btnQuickAddChequeForSelectedDate')?.addEventListener('click', () => {
+        quickAddChequeForSelectedDate(state.selectedCalendarDate || getTodayYMD());
+      });
+      document.getElementById('btnCopySelectedDaySummary')?.addEventListener('click', () => {
+        copySelectedDaySummaryToClipboard();
+      });
+      document.getElementById('btnCloseSelectedDayPopup')?.addEventListener('click', () => {
+        closeSelectedDayPopupModal();
+      });
+      document.getElementById('selectedCalendarDayModal')?.addEventListener('click', (ev) => {
+        if (ev.target && ev.target.id === 'selectedCalendarDayModal') {
+          closeSelectedDayPopupModal();
+        }
+      });
+      window.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') {
+          closeSelectedDayPopupModal();
+          return;
+        }
+        const focusedCalBtn = document.activeElement && document.activeElement.closest && document.activeElement.closest('button[data-cal-date]');
+        if (focusedCalBtn && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(ev.key)) {
+          ev.preventDefault();
+          const currentYMD = focusedCalBtn.getAttribute('data-cal-date');
+          const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
+          let delta = 0;
+          if (ev.key === 'ArrowRight') delta = isRtl ? -1 : 1;
+          else if (ev.key === 'ArrowLeft') delta = isRtl ? 1 : -1;
+          else if (ev.key === 'ArrowDown') delta = 7;
+          else if (ev.key === 'ArrowUp') delta = -7;
+          const nextYMD = addCalendarDays(currentYMD, delta);
+          const parts = nextYMD.split('-').map(Number);
+          state.calendarViewYear = parts[0];
+          state.calendarViewMonth = parts[1] - 1;
+          state.selectedCalendarDate = nextYMD;
+          render45DayCalendar(window._lastMapByDate || {});
+          const targetBtn = document.querySelector(`button[data-cal-date="${nextYMD}"]`);
+          if (targetBtn) targetBtn.focus();
+        }
       });
 
       // Lwalid Mode Toggle
@@ -7038,8 +7707,10 @@
 
       // Submit Operation (Create OR Update existing operation, with Duplicate Cheque Protection)
       let bypassDuplicateWarningOnce = false;
+      let isSubmittingOperationForm = false;
       document.getElementById('formOperation').addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (isSubmittingOperationForm) return;
         const montant = parseFloat(document.getElementById('inputMontant').value) || 0;
         if (!Number.isFinite(montant) || montant <= 0) {
           showToast('Veuillez saisir un montant valide strictement supérieur à 0 DH');
@@ -7152,6 +7823,8 @@
           syncAndScheduleSystemNotifications(false);
           showToast(`Opération mise à jour et plafonds recalculés (${sim.tranches.length} chèque(s))`);
         } else {
+          isSubmittingOperationForm = true;
+          try {
           const attachedPhoto = currentDraftPhotoDataUrl || null;
           const newOp = {
             id: 'op_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
@@ -7187,6 +7860,9 @@
           renderKPIsAndAllViews();
           syncAndScheduleSystemNotifications(false);
           showToast(`Opération enregistrée : ${sim.tranches.length} chèque(s) planifié(s) pour ${beneficiaire}`);
+          } finally {
+            isSubmittingOperationForm = false;
+          }
         }
       });
 
@@ -8069,6 +8745,7 @@
         state.isLocked = true;
         sessionVaultDekBytes = null;
         sessionVaultCryptoKey = null;
+        keyIsPersistedAndRecoverable = false;
         photoMemoryCache.clear();
         state.operations = [];
         renderKPIsAndAllViews();

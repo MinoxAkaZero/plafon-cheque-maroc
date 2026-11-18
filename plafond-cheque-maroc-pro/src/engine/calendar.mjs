@@ -168,27 +168,43 @@ export function generateMoroccanHolidaysForYear(year) {
   } catch (e) {}
 
   if (!intlSuccess) {
-    const ref2026Religious = [
-      { baseDate: '2026-03-20', label: `Aïd Al-Fitr J1 — Estimé ±1j (${y})`, labelAr: 'عيد الفطر اليوم 1 (تقديري)', labelEn: 'Eid al-Fitr Day 1 (Est.)' },
-      { baseDate: '2026-03-21', label: `Aïd Al-Fitr J2 — Estimé ±1j (${y})`, labelAr: 'عيد الفطر اليوم 2 (تقديري)', labelEn: 'Eid al-Fitr Day 2 (Est.)' },
-      { baseDate: '2026-05-27', label: `Aïd Al-Adha J1 — Estimé ±1j (${y})`, labelAr: 'عيد الأضحى اليوم 1 (تقديري)', labelEn: 'Eid al-Adha Day 1 (Est.)' },
-      { baseDate: '2026-05-28', label: `Aïd Al-Adha J2 — Estimé ±1j (${y})`, labelAr: 'عيد الأضحى اليوم 2 (تقديري)', labelEn: 'Eid al-Adha Day 2 (Est.)' },
-      { baseDate: '2026-06-17', label: `1er Moharram — Estimé ±1j (${y})`, labelAr: 'فاتح محرم (تقديري)', labelEn: 'Islamic New Year (Est.)' },
-      { baseDate: '2026-08-26', label: `Aïd Al-Mawlid — Estimé ±1j (${y})`, labelAr: 'ذكرى المولد النبوي (تقديري)', labelEn: 'Prophet’s Birthday (Est.)' }
-    ];
-    const shiftDays = Math.round((y - 2026) * -10.875);
-    for (const item of ref2026Religious) {
-      const d = parseYMD(item.baseDate);
-      d.setFullYear(y);
-      d.setDate(d.getDate() + shiftDays);
-      religiousForYear.push({
-        date: formatYMD(d),
-        label: item.label,
-        labelAr: item.labelAr,
-        labelEn: item.labelEn,
-        type: 'religious',
-        estimated: true
-      });
+    // Tabular Islamic Calendar Algorithm (30-year 10,631-day lunar cycle via Julian Day Number conversion)
+    // Used when Intl islamic-umalqura is unavailable; all dates remain strictly marked estimated: true (±1j Habous).
+    function gregorianToHijriTabular(gYear, gMonth, gDay) {
+      const a = Math.floor((14 - gMonth) / 12);
+      const y1 = gYear + 4800 - a;
+      const m1 = gMonth + 12 * a - 3;
+      const jdn = gDay + Math.floor((153 * m1 + 2) / 5) + 365 * y1 + Math.floor(y1 / 4) - Math.floor(y1 / 100) + Math.floor(y1 / 400) - 32045;
+      const l = jdn - 1948440 + 10632;
+      const n = Math.floor((l - 1) / 10631);
+      const l2 = l - 10631 * n + 354;
+      const j = (Math.floor((10985 - l2) / 5316)) * (Math.floor((50 * l2) / 17719)) + (Math.floor(l2 / 5670)) * (Math.floor((43 * l2) / 15238));
+      const l3 = l2 - (Math.floor((30 - j) / 15)) * (Math.floor((17719 * j) / 50)) - (Math.floor(j / 16)) * (Math.floor((15238 * j) / 43)) + 29;
+      const hMonth = Math.floor((24 * l3) / 709);
+      const hDay = l3 - Math.floor((709 * hMonth) / 24);
+      const hYear = 30 * n + j - 30;
+      return { hYear, hMonth, hDay };
+    }
+    const cursor = new Date(y, 0, 1, 12, 0, 0);
+    while (cursor.getFullYear() === y) {
+      const { hMonth, hDay } = gregorianToHijriTabular(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate());
+      const ymd = formatYMD(cursor);
+      if (hMonth === 1 && hDay === 1) {
+        religiousForYear.push({ date: ymd, label: `1er Moharram — Estimé ±1j (${y})`, labelAr: 'فاتح محرم (تقديري ±1 يوم)', labelEn: 'Islamic New Year (Est. ±1d)', type: 'religious', estimated: true });
+      } else if (hMonth === 3 && hDay === 12) {
+        religiousForYear.push({ date: ymd, label: `Aïd Al-Mawlid J1 — Estimé ±1j (${y})`, labelAr: 'ذكرى المولد النبوي (تقديري ±1 يوم)', labelEn: 'Prophet’s Birthday Day 1 (Est. ±1d)', type: 'religious', estimated: true });
+      } else if (hMonth === 3 && hDay === 13) {
+        religiousForYear.push({ date: ymd, label: `Aïd Al-Mawlid J2 — Estimé ±1j (${y})`, labelAr: 'عيد المولد النبوي اليوم 2 (تقديري)', labelEn: 'Prophet’s Birthday Day 2 (Est. ±1d)', type: 'religious', estimated: true });
+      } else if (hMonth === 10 && hDay === 1) {
+        religiousForYear.push({ date: ymd, label: `Aïd Al-Fitr J1 — Estimé ±1j (${y})`, labelAr: 'عيد الفطر اليوم 1 (تقديري ±1 يوم)', labelEn: 'Eid al-Fitr Day 1 (Est. ±1d)', type: 'religious', estimated: true });
+      } else if (hMonth === 10 && hDay === 2) {
+        religiousForYear.push({ date: ymd, label: `Aïd Al-Fitr J2 — Estimé ±1j (${y})`, labelAr: 'عيد الفطر اليوم 2 (تقديري ±1 يوم)', labelEn: 'Eid al-Fitr Day 2 (Est. ±1d)', type: 'religious', estimated: true });
+      } else if (hMonth === 12 && hDay === 10) {
+        religiousForYear.push({ date: ymd, label: `Aïd Al-Adha J1 — Estimé ±1j (${y})`, labelAr: 'عيد الأضحى اليوم 1 (تقديري ±1 يوم)', labelEn: 'Eid al-Adha Day 1 (Est. ±1d)', type: 'religious', estimated: true });
+      } else if (hMonth === 12 && hDay === 11) {
+        religiousForYear.push({ date: ymd, label: `Aïd Al-Adha J2 — Estimé ±1j (${y})`, labelAr: 'عيد الأضحى اليوم 2 (تقديري ±1 يوم)', labelEn: 'Eid al-Adha Day 2 (Est. ±1d)', type: 'religious', estimated: true });
+      }
+      cursor.setDate(cursor.getDate() + 1);
     }
   }
 

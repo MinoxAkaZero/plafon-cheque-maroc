@@ -116,3 +116,79 @@ Existing users upgrading from any previous version (`v1.0` through `v10.2`) to *
 - Open Worldwide Application Security Project (OWASP): [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) and [OWASP Cryptographic Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 - Capacitor / Ionic Documentation: [Capacitor Development Workflow](https://capacitorjs.com/docs/basics/workflow), [Deploying Capacitor Android Apps to Google Play](https://capacitorjs.com/docs/android/deploying-to-google-play), and [Deploying Capacitor iOS Apps to the App Store](https://capacitorjs.com/docs/ios/deploying-to-app-store).
 - Apple Developer Documentation: [App Store Connect Screenshot & Submission Specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
+
+
+---
+
+## Part IV — Second-Pass Audit, Interactive Calendar UX, Native Secure Storage & Key-Persistence Hardening
+
+### 1. Summary of Second-Pass Confirmed Issues & Improvements (`BUG-18` through `BUG-23`)
+
+| Issue ID | Category | File(s) Modified | Confirmed Finding / Requirement | Engineering Modification Implemented | Automated Test Coverage |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **BUG-18** | **Interactive Calendar & Daily Cheque Details** | `index.html`, `public/index.html`, `gestion_cheques_maroc.html` | Clicking a date on the monthly calendar previously only scrolled toward the planning list without displaying an interactive daily cheque details panel, empty-day quick-add, or daily summary copy. | Added `#selectedCalendarDayPanel` below `#calendarGrid45` showing the selected date, cheque count, active scheduled total, configured daily ceiling, remaining capacity, utilization percentage, all cheques for that date (including `cancelled` and `expired` records with clear ceiling-contribution indicators), click-to-edit integration with `#chequeEditModal`, empty-date quick-add, `#btnCalGoToday` ("Aujourd'hui"), and `#btnCopySelectedDaySummary`. | `E2E-07`, `E2E-08`, `E2E-09`, `E2E-10`, `E2E-11`, `E2E-12`, `E2E-13`, `E2E-20`, `E2E-21` |
+| **BUG-19** | **Native Hardware Keystore / Keychain Integration** | `android/.../SecureVaultKeystorePlugin.java`, `android/.../MainActivity.java`, `ios/.../SecureVaultKeychainPlugin.swift`, `package.json` | The web layer checked for `window.Capacitor.Plugins.SecureStoragePlugin`, but `package.json` lacked the dependency and the native Android/iOS folders lacked registered first-party hardware keystore/keychain plugin classes. | Added `capacitor-secure-storage-plugin` (`^0.9.0`) to `package.json` and implemented first-party native hardware plugins: `SecureVaultKeystorePlugin.java` (`AndroidKeyStore` `AES/GCM/NoPadding` 256-bit hardware master key registered in `MainActivity.java`) and `SecureVaultKeychainPlugin.swift` (`Security.framework` `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). | `Test 53`, `E2E-19` |
+| **BUG-20** | **Critical Key-Persistence Vulnerability** | `index.html` (`ensureSessionVaultDek`, `saveState`) | In the `catch (idbErr)` block of `ensureSessionVaultDek()`, when `IndexedDB` failed and no PIN was configured, the app generated a temporary random key in memory (`sessionVaultDekBytes = generateRandomDekBytes()`) and encrypted data that could never be decrypted after restarting. | Removed ephemeral RAM key generation on storage failure. Added mandatory read-back verification (`get` after `set` in both Native Keystore/Keychain and `IndexedDB` `IDB_KEY_STORE`) and `keyIsPersistedAndRecoverable` gating. If key persistence fails, `ensureSessionVaultDek()` throws an explicit error and `saveState()` blocks unsafe writes rather than encrypting with a temporary unrecoverable key. | `E2E-02`, `E2E-03`, `E2E-18`, `E2E-19` |
+| **BUG-21** | **Reproducible Browser E2E Testing** | `tests/e2e_browser_audit.py`, `tests/requirements.txt`, `package.json`, `.github/workflows/build-ios-and-android.yml` | `tests/e2e_browser_audit.py` contained a hardcoded `/working_dir/...` path, lacked a `requirements.txt` dependency manifest, and was not executed in GitHub Actions CI. | Replaced the hardcoded path with dynamic relative resolution (`os.path.dirname(os.path.abspath(__file__))`), created `tests/requirements.txt` (`selenium>=4.18.0`), added `npm run test:e2e` and `npm run test:all` in `package.json`, and added a dedicated `browser-e2e-tests` job in GitHub Actions that fails CI if any of the 21 browser E2E tests fail. | `Test 55`, `E2E-01`–`E2E-21` |
+| **BUG-22** | **Moroccan Holiday Hijri Calculation** | `src/engine/calendar.mjs`, `index.html` (`generateMoroccanHolidaysForYear`) | The fallback behind `Intl.DateTimeFormat('en-u-ca-islamic-umalqura')` used a linear `-10.875 * (y - 2026)` day offset despite being described as astronomical. | Replaced the linear approximation with the deterministic **Tabular Islamic Calendar Algorithm (`gregorianToHijriTabular`)** using the 30-year 10,631-day lunar cycle via Julian Day Number (JDN) conversion across both `src/engine/calendar.mjs` and `index.html`, keeping all movable religious holidays strictly marked `estimated: true` (`±1j Habous`). | `Test 44`, `Test 51`, `Test 52`, `E2E-16` |
+| **BUG-23** | **iOS Release Signing & ExportArchive Workflow** | `.github/workflows/build-ios-and-android.yml`, `.github/workflows/main.yml` | The iOS workflow checked signing secrets (`IOS_CERTIFICATE_P12_BASE64`, `IOS_PROVISIONING_PROFILE_BASE64`, `APPLE_TEAM_ID`) without creating a temporary macOS keychain, importing the `.p12`, installing the `.mobileprovision` UUID, or running `xcodebuild -exportArchive`. | Implemented the complete macOS signing pipeline: temporary keychain creation (`security create-keychain`), `.p12` import (`security import` + `security set-key-partition-list`), provisioning profile UUID extraction and installation to `~/Library/MobileDevice/Provisioning Profiles/`, `ExportOptions.plist` generation, `xcodebuild archive`, `xcodebuild -exportArchive`, and `if: always()` credential cleanup. | `Test 55` |
+
+### 2. Local & CI Execution of Automated Tests (`76/76` Total Tests Passing)
+- **Unit, Integration & HTML-Module Parity Suite (`55/55` Passed)**:
+  ```bash
+  npm test
+  # Executes: node tests/engine.test.mjs (55/55 passing)
+  ```
+- **Portable Headless Chromium Browser E2E Suite (`21/21` Passed)**:
+  ```bash
+  pip install -r tests/requirements.txt
+  npm run test:e2e
+  # Executes: python3 tests/e2e_browser_audit.py (21/21 passing)
+  ```
+
+---
+
+## Part V — Updated User Guide: Interactive Monthly Calendar & Daily Cheque Management (Deliverable D)
+
+The monthly calendar inside the **Calendrier** tab is fully interactive so you can inspect, edit, or add cheques for any day in one click:
+
+1. **Select a Date**: Click any day cell (`DD/MM/YYYY`) in the monthly calendar grid. The selected date is highlighted with an indigo border, and the **Détails du jour sélectionné** panel immediately updates below the calendar.
+2. **View Scheduled Cheques & Ceiling Usage**: The daily panel shows five live figures for the selected date—**Nombre de chèques**, **Total programmé (Actif)**, **Plafond journalier**, **Plafond disponible**, and **Utilisation (%)**—followed by the list of all cheques on that date. Cancelled (`Annulé`) and expired (`Expiré / Périmé`) cheques remain visible with a clear **Hors plafond (0 DH)** label so you always see which cheques count toward your daily ceiling.
+3. **Open or Edit a Cheque**: Click any cheque card inside the daily panel (`Détails / Modifier →`) to open the cheque editor, update its amount, date, beneficiary, bank, or status, and automatically recalculate the day's remaining ceiling.
+4. **Add a Cheque for That Date**: Click **+ Ajouter un chèque pour cette date** in the daily panel (or in the empty-day message when no cheques are scheduled). The cheque entry form opens with your selected date automatically pre-filled and ready to edit before saving.
+5. **Copy the Daily Summary**: Click **📋 Copier résumé du jour** in the daily panel header to copy a clean text summary of the selected date (date, cheque count, total scheduled amount, daily ceiling, remaining ceiling, and individual cheque lines) for WhatsApp, email, or accounting notes.
+6. **Return to Today's Date**: Click the **Aujourd'hui** (`Today` / `اليوم`) button next to the month navigation arrows (`◀ Mois préc.` / `Mois suiv. ▶`) at any time to jump back to the current month, highlight today's date, and display today's scheduled cheques.
+
+
+---
+
+## Part VI — Final Refinement, Keyboard/ARIA Accessibility, Unmocked Browser WebCrypto/IndexedDB Verification & CI Separation
+
+### 1. Confirmed Final Refinements Implemented
+
+| Area | Files Modified | Engineering Refinement Implemented | Verification Test ID |
+| :--- | :--- | :--- | :--- |
+| **1. Calendar Keyboard & Screen-Reader Accessibility** | `index.html`, `public/index.html`, `gestion_cheques_maroc.html`, `public/gestion_cheques_maroc.html` | Upgraded all calendar date cells inside `#calendarGrid45` from `<div>` tags to semantic `<button type="button" data-cal-date="...">` elements with localized `aria-label` summaries (`Date, working status, cheque count, active ceiling amount, remaining ceiling`), `aria-selected`, `aria-pressed`, visible focus rings (`focus:ring-3 focus:ring-indigo-600`), keyboard arrow navigation (`ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown` with automatic RTL inversion in Arabic), focus transfer into `#btnCloseSelectedDayPopup` on popup open, and automatic focus restoration back to the selected date button when closing the popup via `Escape` or backdrop click. | `E2E-08`, `E2E-19`, `E2E-24` |
+| **2. Daily Details Popup: Active Ceiling vs. Gross Total & Active vs. Excluded Cheques** | `index.html`, `public/index.html`, `gestion_cheques_maroc.html`, `public/gestion_cheques_maroc.html` | Added `#lblSelectedDayChequeBreakdown` (`{active} actif(s) · {excluded} hors plafond`) below `#lblSelectedDayChequeCount` and `#lblSelectedDayGrossTotalSub` (`Total brut (incl. annulés/expirés) : {gross}`) below `#lblSelectedDayTotalScheduled` in FR, AR, and EN. Upgraded `copySelectedDaySummaryToClipboard()` to report total assigned cheques, active ceiling-counting cheques, excluded (`cancelled`/`expired`) cheques, active ceiling amount, gross scheduled amount, daily ceiling, remaining ceiling, and per-cheque ceiling contribution tags. | `E2E-09`, `E2E-10`, `E2E-13`, `E2E-19` |
+| **3. Unmocked Real-Browser Web Crypto (`SubtleCrypto`) & Disk `IndexedDB` E2E Suite** | `tests/e2e_browser_audit.py` | Removed all simulated/custom cryptography (`sha256`/`hmac`/`kdf`) and in-memory `Map()` storage mocks from `tests/e2e_browser_audit.py`. The E2E suite now serves the application over a local HTTP loopback origin (`http://plafondcheque.test:<port>`) mapped to `127.0.0.1` so headless Chromium runs with genuine C++ `SubtleCrypto` (`AES-256-GCM` & `PBKDF2-SHA256` 210,000 iterations), genuine `IDBFactory` (`IndexedDB` on disk), and genuine `Storage` (`localStorage` on disk), verified across **three full browser page reloads (`driver.refresh()`)**. | `E2E-01`–`E2E-24` (`24/24` passed) |
+| **4. Non-Duplicate GitHub Actions Workflows** | `.github/workflows/main.yml`, `.github/workflows/build-ios-and-android.yml` | Separated `.github/workflows/main.yml` (Continuous Integration running the 55 Node.js unit/parity tests and 24 unmocked Chromium browser E2E tests on every `push` to `main`/`master` and `pull_request`) from `.github/workflows/build-ios-and-android.yml` (Mobile Release workflow triggered on `v*` version tags or manual `workflow_dispatch`), eliminating duplicate CI executions on branch pushes. | `Test 55` |
+
+### 2. Complete Summary of Tests Executed (`79/79` Automated Checks Passed, `0` Failed)
+
+1. **Static Web App Validation (`check_web_app.py`)**:
+   - Command: `python3 skills/web-app-generation/scripts/check_web_app.py output/gestion_cheques_maroc.html --previous intermediate/gestion_cheques_maroc.html.prev`
+   - Result: **`OK: no issues found.` (0 errors, 0 warnings)**
+2. **Node.js Unit, Integration & HTML-Module Parity Suite (`tests/engine.test.mjs`)**:
+   - Command: `node tests/engine.test.mjs`
+   - Result: **`55/55` Passed, `0` Failed** (Covers Moroccan ceiling distribution, weekend/holiday anticipation, centime precision, French/Arabic cheque orthography, W3C Web Crypto `PBKDF2-SHA256` 210k & 100k backward compatibility, `AES-256-GCM` vault and backup encryption, metadata validation, 7-step backup validation, `IndexedDB` vs `localStorage` revision conflict resolution, Tabular Hijri holiday calculation, notification deduplication/privacy/expiry exclusion, HTML-to-module parity, native plugin file verification, and CI workflow separation).
+3. **Unmocked Real-Browser Headless Chromium End-to-End Suite (`tests/e2e_browser_audit.py`)**:
+   - Command: `python3 tests/e2e_browser_audit.py`
+   - Result: **`24/24` Passed, `0` Failed** (Executed against real Chromium `SubtleCrypto`, real disk `IndexedDB`, and real disk `localStorage`, including verification that `window.crypto.subtle.exportKey('raw', cryptoKey)` is rejected by the browser with `InvalidAccessError` on non-extractable keys, and three full `driver.refresh()` browser page reloads confirming survival of non-extractable keys, PIN-wrapped DEKs, Recovery-wrapped DEKs, encrypted financial vaults, and encrypted cheque photo `Blob`s across restarts).
+
+### 3. Honest Disclosure of Remaining Limitations & Native Build Verification Status
+
+- **What Was Verified in This Environment**:
+  - Real W3C Web Crypto (`SubtleCrypto` C++ `AES-256-GCM` and `PBKDF2-HMAC-SHA256` 210,000 iterations), real browser `IndexedDB` (`PlafondChequeMarocDB` v4), real browser `localStorage`, non-extractable `CryptoKey` persistence across browser restarts (`driver.refresh()`), PIN/Passphrase and Recovery Key DEK wrapping/unwrapping across restarts, interactive 7-column calendar keyboard/mouse/touch workflows, backup/restore rollback, and trilingual (`fr`, `ar` RTL, `en`) rendering were all directly executed and verified in headless Chromium and Node.js.
+- **What Remains Unverified on Physical Mobile Hardware**:
+  - **Android Hardware Keystore (`SecureVaultKeystorePlugin.java`) & APK Installation**: While the Java source code (`AndroidKeyStore` `AES/GCM/NoPadding`) and `MainActivity.java` registration are included and statically verified (`Test 53`), no Android SDK/Gradle build or physical Android device execution was performed inside this sandbox container. Hardware-backed Android Keystore execution, physical camera capture, and closed-app Android 13/14 `SCHEDULE_EXACT_ALARM` notifications must be verified on a real Android device using the `android-debug-testing` / `android-production-release` GitHub Actions workflow before Google Play publication.
+  - **iOS Keychain (`SecureVaultKeychainPlugin.swift`) & Signed IPA Archive**: While the Swift Keychain plugin (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`), `Info.plist`, `PrivacyInfo.xcprivacy`, and the macOS Keychain/Provisioning Profile `xcodebuild -exportArchive` workflow in `.github/workflows/build-ios-and-android.yml` are complete (`Test 53`, `Test 55`), no macOS/Xcode build or physical iPhone test was executed in this Linux container. Hardware-backed iOS Keychain storage and App Store Connect submission require an active Apple Developer Program account (`IOS_CERTIFICATE_P12_BASE64`, `IOS_P12_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`, `APPLE_TEAM_ID`) and verification on a physical iPhone.
