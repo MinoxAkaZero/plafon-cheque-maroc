@@ -207,7 +207,7 @@ export function registerCloudAuthUi(env) {
             'Votre adresse e-mail n’est pas encore vérifiée. Ouvrez le lien reçu par e-mail puis réessayez.',
             'error'
           );
-        } else if (err.code === 'CLOUD_NOT_CONFIGURED') {
+        } else if (err.code === 'CLOUD_NOT_CONFIGURED' || err.code === 'BACKEND_NOT_CONFIGURED') {
           setCloudAuthFeedback(
             typeof env.pcmT === 'function'
               ? env.pcmT('msg_err_backend_unconfigured')

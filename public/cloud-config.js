@@ -1,7 +1,6 @@
-// PlafondChèque Maroc Pro (v12.5.0) — Public Supabase Backend Configuration
-// Replace the empty strings below with your Supabase Project URL and Public Anon Key.
-// Row Level Security (RLS) on PostgreSQL protects all user records; NEVER put a service_role key here.
+// PlafondChèque Maroc Pro (v12.5.1) — Public Supabase Backend Configuration
+// Row Level Security (RLS) on PostgreSQL protects all user records; NEVER put a service_role / sb_secret key here.
 window.PCM_CLOUD_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: ""
+  supabaseUrl: 'https://qfeejpgvnjxxtlowwoza.supabase.co',
+  supabaseAnonKey: 'sb_publishable_Gj9bOGpnult3rIf2Vt31Fw_5FftIyyL'
 };
