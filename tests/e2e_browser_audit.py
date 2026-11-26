@@ -779,8 +779,12 @@ try:
 
     # E2E-35: Language Persistence across Real Browser Reload (Arabic RTL stays Arabic RTL after driver.refresh)
     driver.refresh()
-    time.sleep(0.6)
-    lang_persist = driver.execute_script("return { lang: state.language, dir: document.documentElement.getAttribute('dir') };")
+    lang_persist = {"lang": None, "dir": None}
+    for _ in range(50):
+        time.sleep(0.1)
+        lang_persist = driver.execute_script("return { lang: window.state && window.state.language, dir: document.documentElement.getAttribute('dir') };")
+        if lang_persist.get("lang") == "ar" and lang_persist.get("dir") == "rtl":
+            break
     assert lang_persist["lang"] == "ar" and lang_persist["dir"] == "rtl", f"Arabic language did not persist across reload: {lang_persist}"
     print("✅ PASS: E2E-35: Selected language (Arabic RTL) persists across real browser restart (driver.refresh)")
 
