@@ -1,7 +1,7 @@
 {
   "appId": "ma.plafondcheque.pro",
   "appName": "PlafondCheque Pro",
-  "webDir": "public",
+  "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https",
@@ -9,9 +9,8 @@
   },
   "plugins": {
     "LocalNotifications": {
-      "smallIcon": "ic_stat_icon_config_sample",
-      "iconColor": "#4F46E5",
-      "sound": "beep.wav"
+      "smallIcon": "ic_stat_plafondcheque",
+      "iconColor": "#4F46E5"
     }
   }
 }

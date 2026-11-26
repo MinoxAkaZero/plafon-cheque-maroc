@@ -1,7 +1,7 @@
 {
   "name": "PlafondChèque Maroc Pro — Gestion des Chèques & Plafonds Journaliers",
   "short_name": "PlafondChèque Pro",
-  "description": "Application professionnelle de suivi des chèques, plafonds journaliers en DH et calendrier bancaire marocain hors-ligne.",
+  "description": "Application professionnelle hors-ligne de suivi des chèques, plafonds journaliers en DH et calendrier bancaire marocain, avec sauvegarde cloud chiffrée optionnelle.",
   "lang": "fr",
   "dir": "auto",
   "start_url": "./index.html",
@@ -34,5 +34,5 @@
       "type": "image/png"
     }
   ],
-  "version": "11.0.0"
+  "version": "12.5.1"
 }

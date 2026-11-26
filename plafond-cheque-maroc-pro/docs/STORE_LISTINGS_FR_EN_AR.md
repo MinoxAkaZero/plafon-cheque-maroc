@@ -1,4 +1,4 @@
-# PlafondChèque Maroc Pro v10.0 — Official Store Listings & Canva Import Guide (FR / EN / AR)
+# PlafondChèque Maroc Pro v12.5.1 — Official Store Listings & Canva Import Guide (FR / EN / AR)
 
 ## 1. How to Import the Editable Presentation into Canva
 1. Open [Canva](https://www.canva.com/) and click **Create a design (Créer un design)** → **Import file (Importer un fichier)**.
@@ -31,7 +31,7 @@
   2. Calcul exact au centime et découpage automatique sous le plafond journalier
   3. Calendrier bancaire marocain (week-ends et jours fériés exclus automatiquement)
   4. Photographie de chèque intégrée et montants en toutes lettres (Français & Arabe)
-  5. Stockage 100 % hors-ligne avec PIN PBKDF2-SHA256 et sauvegarde AES-256-GCM
+  5. Fonctionnement hors-ligne par défaut avec PIN PBKDF2-SHA256, coffre AES-256-GCM et sauvegarde cloud chiffrée optionnelle
 - **Mots-clés** : chèque maroc, plafond journalier, gestion chèques, trésorerie PME, calendrier bancaire maroc, dirham, comptabilité.
 
 ---
@@ -51,7 +51,7 @@
   2. Centime-exact arithmetic and automatic multi-day cheque splitting
   3. Smart Moroccan banking calendar skipping weekends and official holidays
   4. Cheque photo attachment and automatic written amounts in French & Arabic
-  5. 100% offline local storage with PIN lock and AES-256-GCM encrypted backups
+  5. Offline-first local storage with PIN lock, AES-256-GCM encryption, and optional encrypted cloud backup
 - **Keywords**: morocco cheque, daily ceiling, cheque manager, treasury, banking calendar, dirham, accounting, reminders.
 
 ---
@@ -71,5 +71,10 @@
   2. حساب دقيق بالسنتيم وتقسيم تلقائي للشيكات تحت السقف اليومي
   3. تقويم بنكي مغربي يستثني عطلة نهاية الأسبوع والأعياد الرسمية
   4. إرفاق صور الشيكات وكتابة المبالغ بالحروف بالعربية والفرنسية
-  5. يعمل بدون أنترنت مع قفل PIN ونسخ احتياطي مشفر AES-256-GCM
+  5. يعمل بدون أنترنت افتراضياً مع قفل PIN وتشفير AES-256-GCM ونسخ احتياطي سحابي مشفر اختياري
 - **الكلمات المفتاحية**: شيكات المغرب، السقف اليومي، تدبير الشيكات، الخزينة، التقويم البنكي، درهم، محاسبة، تنبيهات الشيكات.
+
+## Honest Cloud Encryption & Privacy Notice (Phase 3.1)
+- **EN**: Your cheque details and photos are encrypted on your device. A compromised server could still see timing and size metadata and could withhold or replay old data. If you lose your recovery key and all your devices, your cloud data cannot be recovered.
+- **FR**: Vos détails de chèques et photos sont chiffrés sur votre appareil. Un serveur compromis pourrait encore voir les métadonnées de date et de taille, et retenir ou rejouer d’anciennes données. Si vous perdez votre clé de récupération et tous vos appareils, vos données cloud ne pourront pas être récupérées.
+- **AR**: يتم تشفير تفاصيل الشيكات والصور على جهازك. قد يتمكن خادم مخترق من رؤية بيانات التوقيت والحجم أو حجب بيانات قديمة أو إعادة إرسالها. إذا فقدت مفتاح الاسترداد وجميع أجهزتك، لا يمكن استعادة بياناتك السحابية.

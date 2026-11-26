@@ -1,8 +1,40 @@
 export function numberToFrenchWords(n) {
   n = Math.floor(Math.abs(Number(n) || 0));
   if (n === 0) return 'zéro';
-  const units = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
-  const tens = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+  const units = [
+    '',
+    'un',
+    'deux',
+    'trois',
+    'quatre',
+    'cinq',
+    'six',
+    'sept',
+    'huit',
+    'neuf',
+    'dix',
+    'onze',
+    'douze',
+    'treize',
+    'quatorze',
+    'quinze',
+    'seize',
+    'dix-sept',
+    'dix-huit',
+    'dix-neuf'
+  ];
+  const tens = [
+    '',
+    '',
+    'vingt',
+    'trente',
+    'quarante',
+    'cinquante',
+    'soixante',
+    'soixante',
+    'quatre-vingt',
+    'quatre-vingt'
+  ];
 
   function convertBelow100(num, isFinalGroup) {
     if (num < 20) return units[num];
@@ -10,10 +42,10 @@ export function numberToFrenchWords(n) {
     const u = num % 10;
     if (t === 7 || t === 9) {
       const sub = 10 + u;
-      const connector = (t === 7 && sub === 11) ? ' et ' : '-';
+      const connector = t === 7 && sub === 11 ? ' et ' : '-';
       return tens[t] + connector + units[sub];
     }
-    if (u === 0) return (t === 8 && isFinalGroup) ? 'quatre-vingts' : tens[t];
+    if (u === 0) return t === 8 && isFinalGroup ? 'quatre-vingts' : tens[t];
     if (u === 1 && t !== 8) return tens[t] + ' et un';
     return tens[t] + '-' + units[u];
   }
@@ -58,9 +90,41 @@ export function amountToMoroccanChequeWordsFR(amount) {
 export function numberToArabicWords(n) {
   n = Math.floor(Math.abs(Number(n) || 0));
   if (n === 0) return 'صفر';
-  const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+  const ones = [
+    '',
+    'واحد',
+    'اثنان',
+    'ثلاثة',
+    'أربعة',
+    'خمسة',
+    'ستة',
+    'سبعة',
+    'ثمانية',
+    'تسعة',
+    'عشرة',
+    'أحد عشر',
+    'اثنا عشر',
+    'ثلاثة عشر',
+    'أربعة عشر',
+    'خمسة عشر',
+    'ستة عشر',
+    'سبعة عشر',
+    'ثمانية عشر',
+    'تسعة عشر'
+  ];
   const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
-  const hundreds = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+  const hundreds = [
+    '',
+    'مائة',
+    'مائتان',
+    'ثلاثمائة',
+    'أربعمائة',
+    'خمسمائة',
+    'ستمائة',
+    'سبعمائة',
+    'ثمانمائة',
+    'تسعمائة'
+  ];
 
   function convertBelow1000Ar(num) {
     if (num === 0) return '';
@@ -88,9 +152,30 @@ export function numberToArabicWords(n) {
   const thousands = Math.floor(n / 1000);
   const rest = n % 1000;
 
-  if (milliards > 0) groups.push(milliards === 1 ? 'مليار' : milliards === 2 ? 'ملياران' : convertBelow1000Ar(milliards) + (milliards <= 10 ? ' ملايير' : ' مليار'));
-  if (millions > 0) groups.push(millions === 1 ? 'مليون' : millions === 2 ? 'مليونان' : convertBelow1000Ar(millions) + (millions <= 10 ? ' ملايين' : ' مليون'));
-  if (thousands > 0) groups.push(thousands === 1 ? 'ألف' : thousands === 2 ? 'ألفان' : convertBelow1000Ar(thousands) + (thousands <= 10 ? ' آلاف' : ' ألف'));
+  if (milliards > 0)
+    groups.push(
+      milliards === 1
+        ? 'مليار'
+        : milliards === 2
+          ? 'ملياران'
+          : convertBelow1000Ar(milliards) + (milliards <= 10 ? ' ملايير' : ' مليار')
+    );
+  if (millions > 0)
+    groups.push(
+      millions === 1
+        ? 'مليون'
+        : millions === 2
+          ? 'مليونان'
+          : convertBelow1000Ar(millions) + (millions <= 10 ? ' ملايين' : ' مليون')
+    );
+  if (thousands > 0)
+    groups.push(
+      thousands === 1
+        ? 'ألف'
+        : thousands === 2
+          ? 'ألفان'
+          : convertBelow1000Ar(thousands) + (thousands <= 10 ? ' آلاف' : ' ألف')
+    );
   if (rest > 0) groups.push(convertBelow1000Ar(rest));
   return groups.join(' و');
 }

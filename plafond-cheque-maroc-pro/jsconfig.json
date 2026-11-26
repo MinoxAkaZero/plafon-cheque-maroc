@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/engine/**/*.mjs",
+    "src/storage/**/*.mjs",
+    "src/security/crypto.mjs",
+    "src/cloud/cloudCrypto.mjs",
+    "src/cloud/cloudSync.mjs",
+    "src/cloud/googleOAuth.mjs"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "android",
+    "ios"
+  ]
+}

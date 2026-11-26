@@ -1,0 +1,18 @@
+# Dependencies & Build Outputs
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.local
+
+# Native Mobile Build Artifacts
+android/app/build/
+android/.gradle/
+ios/App/Pods/
+ios/App/build/
+
+# Python / Test Artifacts
+__pycache__/
+*.pyc
+.pytest_cache/

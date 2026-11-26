@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ma.plafondcheque.pro">
 
+    <!-- Network Permission for Real Supabase Auth, Google OAuth & Cloud Sync -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Camera & Photo Permissions (Opt-in for Cheque Photography) -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -33,6 +36,17 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Secure OAuth Deep-Link Callback for Google Sign-In & Supabase Auth (ma.plafondcheque.pro://auth/callback) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="ma.plafondcheque.pro"
+                    android:host="auth"
+                    android:pathPrefix="/callback" />
             </intent-filter>
         </activity>
 

@@ -1,4 +1,4 @@
-name: CI — Automated Unit, Parity & Real Browser E2E Verification (v11.0.0)
+name: CI — Lint, Typecheck, Vite Build, Unit, Security, Real RLS, E2E & Lighthouse
 on:
   push:
     branches: [ "main", "master" ]
@@ -7,34 +7,94 @@ on:
 
 jobs:
   automated-unit-tests:
-    name: 1. Node.js Unit, Integration & Parity Tests (55 Checks)
+    name: 1. Lint, Typecheck, Official Vite Build & Node.js Suites
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Execute Node.js Test Suite
+      - name: Install Dependencies, Lint, Typecheck & Build with Vite
         run: |
-          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
-          cd "$PKG_DIR"
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run format:check
+          npm run build
+      - name: Execute All Node.js Unit, Integration & Security Suites
+        run: |
           npm test
+          npm run test:holidays
+          npm run test:notifications
+          npm run test:pin-lockout
+          npm run test:cloud
+          npm run test:e2ee
+          npm run test:e2ee-sync
+          npm run test:offline-sync
+          npm run test:i18n
+          npm run test:migration
+          npm run test:security
+          npm run test:tailwind
+          npm run test:ios-plugin
+          npm run test:release
 
-  browser-e2e-tests:
-    name: 2. Headless Chromium Real WebCrypto & IndexedDB E2E Tests (24 Checks)
+  supabase-rls-tests:
+    name: 2. Real Local Supabase RLS & delete-account Edge Function Tests
     needs: automated-unit-tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start Local Supabase, Apply Migrations & Run Real RLS Suite
+        run: |
+          supabase start
+          supabase db reset
+          supabase functions serve delete-account --no-verify-jwt &
+          sleep 4
+          STATUS_JSON=$(supabase status -o json)
+          export SUPABASE_URL=$(node -e "console.log(JSON.parse(process.argv[1]).API_URL)" "$STATUS_JSON")
+          export SUPABASE_ANON_KEY=$(node -e "console.log(JSON.parse(process.argv[1]).ANON_KEY)" "$STATUS_JSON")
+          export SUPABASE_SERVICE_ROLE_KEY=$(node -e "console.log(JSON.parse(process.argv[1]).SERVICE_ROLE_KEY)" "$STATUS_JSON")
+          node tests/rls_real_supabase.test.mjs
+      - name: Stop Local Supabase
+        if: always()
+        run: supabase stop
+
+  browser-e2e-tests:
+    name: 3. Headless Chromium E2E & Lighthouse (PWA / A11y / Performance >= 90)
+    needs: automated-unit-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - uses: browser-actions/setup-chrome@v1
         with:
           install-chromedriver: true
-      - name: Install Selenium & Run Unmocked Browser E2E Suite
+      - name: Build dist/ with Vite & Run Unmocked Browser E2E Suite
         run: |
-          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
-          cd "$PKG_DIR"
+          npm ci
+          npm run build
           pip install -r tests/requirements.txt
           python3 tests/e2e_browser_audit.py
+      - name: Run Lighthouse Audit on Built dist/
+        run: |
+          npx --yes @lhci/cli@0.14.x autorun --collect.staticDistDir=./dist --assert.assertions.categories:pwa="[\"error\", {\"minScore\": 0.9}]" --assert.assertions.categories:accessibility="[\"error\", {\"minScore\": 0.9}]" --assert.assertions.categories:performance="[\"error\", {\"minScore\": 0.9}]"

@@ -20,7 +20,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /**
- * Hardware-backed Android Keystore plugin for PlafondChèque Maroc Pro (v11.0.0).
+ * Hardware-backed Android Keystore plugin for PlafondChèque Maroc Pro (v12.5.1).
  * Wraps and unwraps the 256-bit Data Encryption Key (DEK) using a non-exportable
  * AES-256-GCM master key inside the Android Hardware Keystore ("AndroidKeyStore").
  */

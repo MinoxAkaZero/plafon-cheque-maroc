@@ -23,9 +23,20 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>11.0.0</string>
+    <string>12.5.1</string>
     <key>CFBundleVersion</key>
-    <string>11</string>
+    <string>125</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>ma.plafondcheque.pro.auth</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>ma.plafondcheque.pro</string>
+            </array>
+        </dict>
+    </array>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSCameraUsageDescription</key>

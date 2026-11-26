@@ -24,7 +24,9 @@ export function fromCentimes(centimes) {
 }
 
 export function isInactiveChequeStatus(status) {
-  const s = String(status || '').trim().toLowerCase();
+  const s = String(status || '')
+    .trim()
+    .toLowerCase();
   return s === 'cancelled' || s === 'annule' || s === 'expired' || s === 'expire';
 }
 
@@ -54,14 +56,15 @@ export function validateChequeInput({ montant, dateSaisie, datePaiement, benefic
 
 export function computeScheduledCentimesByDate(operations, excludeOperationId = null, excludeTrancheLocator = null) {
   const map = {};
-  for (const op of (operations || [])) {
+  for (const op of operations || []) {
     if (!op) continue;
     if (excludeOperationId && op.id === excludeOperationId && !excludeTrancheLocator) continue;
     const tranches = Array.isArray(op.tranches) ? op.tranches : [];
     for (let idx = 0; idx < tranches.length; idx++) {
       const tr = tranches[idx];
       if (!tr || !tr.date) continue;
-      if (excludeTrancheLocator && excludeTrancheLocator.opId === op.id && excludeTrancheLocator.trIdx === idx) continue;
+      if (excludeTrancheLocator && excludeTrancheLocator.opId === op.id && excludeTrancheLocator.trIdx === idx)
+        continue;
       if (isInactiveChequeStatus(tr.status)) continue;
       const c = toCentimes(tr.montant);
       if (c > 0) {
@@ -72,7 +75,12 @@ export function computeScheduledCentimesByDate(operations, excludeOperationId = 
   return map;
 }
 
-export function getScheduledCentimesForSingleDate(operations, ymdStr, excludeOperationId = null, excludeTrancheLocator = null) {
+export function getScheduledCentimesForSingleDate(
+  operations,
+  ymdStr,
+  excludeOperationId = null,
+  excludeTrancheLocator = null
+) {
   const map = computeScheduledCentimesByDate(operations, excludeOperationId, excludeTrancheLocator);
   return map[ymdStr] || 0;
 }
@@ -94,7 +102,7 @@ export function findNextAvailableBusinessDayForAmount({
   while (guard < 730) {
     if (isBusinessDay(cursor, holidays)) {
       const used = usedMap[cursor] || 0;
-      if (neededCentimes <= plafondCentimes && (used + neededCentimes) <= plafondCentimes) {
+      if (neededCentimes <= plafondCentimes && used + neededCentimes <= plafondCentimes) {
         return cursor;
       }
       if (neededCentimes > plafondCentimes && used < plafondCentimes) {
@@ -107,29 +115,58 @@ export function findNextAvailableBusinessDayForAmount({
   return cursor;
 }
 
-export function detectDuplicateCheque(operations, { numCheque, beneficiaire, montant, dateSaisie, excludeOperationId = null, excludeTrancheLocator = null }) {
-  const cleanNum = String(numCheque || '').trim().toLowerCase();
-  const cleanBen = String(beneficiaire || '').trim().toLowerCase();
+export function detectDuplicateCheque(
+  operations,
+  { numCheque, beneficiaire, montant, dateSaisie, excludeOperationId = null, excludeTrancheLocator = null }
+) {
+  const cleanNum = String(numCheque || '')
+    .trim()
+    .toLowerCase();
+  const cleanBen = String(beneficiaire || '')
+    .trim()
+    .toLowerCase();
   const targetCentimes = toCentimes(montant);
-  for (const op of (operations || [])) {
+  for (const op of operations || []) {
     if (!op) continue;
     if (excludeOperationId && op.id === excludeOperationId && !excludeTrancheLocator) continue;
     const tranches = Array.isArray(op.tranches) ? op.tranches : [];
     for (let idx = 0; idx < tranches.length; idx++) {
       const tr = tranches[idx];
       if (!tr || isInactiveChequeStatus(tr.status)) continue;
-      if (excludeTrancheLocator && excludeTrancheLocator.opId === op.id && excludeTrancheLocator.trIdx === idx) continue;
-      if (cleanNum && !cleanNum.startsWith('chq-') && String(tr.numCheque || '').trim().toLowerCase() === cleanNum) {
-        return { isDuplicate: true, reason: `Le numéro de chèque "${tr.numCheque}" existe déjà (${op.beneficiaire}, ${tr.date}).` };
+      if (excludeTrancheLocator && excludeTrancheLocator.opId === op.id && excludeTrancheLocator.trIdx === idx)
+        continue;
+      if (
+        cleanNum &&
+        !cleanNum.startsWith('chq-') &&
+        String(tr.numCheque || '')
+          .trim()
+          .toLowerCase() === cleanNum
+      ) {
+        return {
+          isDuplicate: true,
+          reason: `Le numéro de chèque "${tr.numCheque}" existe déjà (${op.beneficiaire}, ${tr.date}).`
+        };
       }
     }
-    if (!excludeTrancheLocator && cleanBen && !cleanBen.startsWith('chèque #') && !cleanBen.startsWith('fournisseur #')) {
-      const hasActiveTranches = tranches.some(t => !isInactiveChequeStatus(t.status));
-      if (hasActiveTranches &&
-          String(op.beneficiaire || '').trim().toLowerCase() === cleanBen &&
-          toCentimes(op.montantTotal) === targetCentimes &&
-          op.dateSaisie === dateSaisie) {
-        return { isDuplicate: true, reason: `Une opération identique pour "${op.beneficiaire}" (${op.montantTotal} DH le ${dateSaisie}) existe déjà.` };
+    if (
+      !excludeTrancheLocator &&
+      cleanBen &&
+      !cleanBen.startsWith('chèque #') &&
+      !cleanBen.startsWith('fournisseur #')
+    ) {
+      const hasActiveTranches = tranches.some((t) => !isInactiveChequeStatus(t.status));
+      if (
+        hasActiveTranches &&
+        String(op.beneficiaire || '')
+          .trim()
+          .toLowerCase() === cleanBen &&
+        toCentimes(op.montantTotal) === targetCentimes &&
+        op.dateSaisie === dateSaisie
+      ) {
+        return {
+          isDuplicate: true,
+          reason: `Une opération identique pour "${op.beneficiaire}" (${op.montantTotal} DH le ${dateSaisie}) existe déjà.`
+        };
       }
     }
   }

@@ -1,13 +1,11 @@
-const APP_VERSION = '11.0.0';
-const CACHE_NAME = 'plafond-cheque-maroc-pro-v11.0.0';
-const ASSETS_TO_CACHE = [
+const APP_VERSION = '__APP_VERSION__';
+const CACHE_NAME = `plafond-cheque-maroc-pro-v${APP_VERSION}`;
+const FALLBACK_ASSETS = [
   './',
   './index.html',
-  './gestion_cheques_maroc.html',
   './manifest.json',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './cloud-config.js',
+  './data/moroccan-holidays.json'
 ];
 const SW_DB_NAME = 'PlafondChequeSWNotifDB';
 const SW_STORE_NAME = 'scheduled_queue';
@@ -33,14 +31,12 @@ async function saveQueueToSWDB(items) {
       const tx = db.transaction(SW_STORE_NAME, 'readwrite');
       const store = tx.objectStore(SW_STORE_NAME);
       store.clear();
-      for (const item of (items || [])) {
-        store.put(item);
-      }
+      for (const item of (items || [])) store.put(item);
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => resolve(false);
     });
     db.close();
-  } catch (e) {}
+  } catch (_) {}
 }
 
 async function checkAndFireDueSWNotifications() {
@@ -76,14 +72,25 @@ async function checkAndFireDueSWNotifications() {
       }
     }
     db.close();
-  } catch (e) {}
+  } catch (_) {}
+}
+
+async function loadPrecacheAssets() {
+  try {
+    const resp = await fetch('./precache-manifest.json', { cache: 'no-store' });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data.assets) && data.assets.length > 0) return data.assets;
+    }
+  } catch (_) {}
+  return FALLBACK_ASSETS;
 }
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll(ASSETS_TO_CACHE).catch(() =>
-        Promise.allSettled(ASSETS_TO_CACHE.map((u) => cache.add(u)))
+    loadPrecacheAssets().then((assets) =>
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.addAll(assets).catch(() => Promise.allSettled(assets.map((u) => cache.add(u))))
       )
     )
   );
@@ -102,9 +109,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'SYNC_SCHEDULED_NOTIFICATIONS') {
-    event.waitUntil(
-      saveQueueToSWDB(data.notifications || []).then(() => checkAndFireDueSWNotifications())
-    );
+    event.waitUntil(saveQueueToSWDB(data.notifications || []).then(() => checkAndFireDueSWNotifications()));
   } else if (data.type === 'SHOW_SYSTEM_NOTIFICATION_NOW') {
     const n = data.notification || {};
     event.waitUntil(
@@ -118,19 +123,7 @@ self.addEventListener('message', (event) => {
         data: n.extra || {}
       })
     );
-  } else if (data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'plafond-cheque-reminders-sync') {
-    event.waitUntil(checkAndFireDueSWNotifications());
-  }
-});
-
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'plafond-cheque-reminders-sync') {
+  } else if (data.type === 'CHECK_DUE_NOTIFICATIONS') {
     event.waitUntil(checkAndFireDueSWNotifications());
   }
 });
@@ -138,73 +131,31 @@ self.addEventListener('sync', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const extra = event.notification.data || {};
-  const params = new URLSearchParams();
-  if (extra.targetType) params.set('notifTarget', extra.targetType);
-  if (extra.opId) params.set('opId', extra.opId);
-  if (extra.trancheId) params.set('trancheId', extra.trancheId);
-  if (extra.numCheque) params.set('numCheque', extra.numCheque);
-  if (extra.date) params.set('date', extra.date);
-  const targetUrl = './index.html' + (params.toString() ? '?' + params.toString() : '');
-
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) {
-          client.focus();
-          client.postMessage({
-            type: 'NOTIFICATION_ACTION_CLICK',
-            extra
-          });
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const c of clients) {
+        if ('focus' in c) {
+          c.focus();
+          c.postMessage({ type: 'NOTIFICATION_DEEP_LINK', extra });
           return;
         }
       }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
-      }
+      if (self.clients.openWindow) return self.clients.openWindow('./index.html');
     })
   );
 });
 
-// Network-First with Offline Cache Fallback for HTML/JS navigation so users always receive updates immediately when online,
-// and Stale-While-Revalidate for static icons/images.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  const reqUrl = new URL(event.request.url);
-  const isHTMLOrJS = event.request.mode === 'navigate' ||
-                     reqUrl.pathname.endsWith('.html') ||
-                     reqUrl.pathname.endsWith('.js') ||
-                     reqUrl.pathname.endsWith('.mjs') ||
-                     reqUrl.pathname.endsWith('.json') ||
-                     reqUrl.pathname === '/' ||
-                     reqUrl.pathname.endsWith('/');
-
-  if (isHTMLOrJS) {
-    event.respondWith(
-      fetch(event.request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const net = fetch(event.request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || net;
-    })
+    caches.match(event.request).then((cached) =>
+      cached || fetch(event.request).then((resp) => {
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          const clone = resp.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return resp;
+      }).catch(() => cached)
+    )
   );
 });

@@ -1,0 +1,22 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-new-func": "error",
+    "no-debugger": "error",
+    "no-undef": "off",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "eqeqeq": ["error", "smart"]
+  },
+  "ignorePatterns": ["dist/", "node_modules/", "android/", "ios/"]
+}

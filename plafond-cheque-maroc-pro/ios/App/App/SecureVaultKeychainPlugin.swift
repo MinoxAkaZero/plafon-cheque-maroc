@@ -3,7 +3,7 @@ import Capacitor
 import Security
 
 /**
- * Hardware-backed iOS Keychain plugin for PlafondChèque Maroc Pro (v11.0.0).
+ * Hardware-backed iOS Keychain plugin for PlafondChèque Maroc Pro (v12.5.1).
  * Stores the 256-bit Data Encryption Key (DEK) in the iOS Keychain with
  * `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` so keys never leave the device.
  */

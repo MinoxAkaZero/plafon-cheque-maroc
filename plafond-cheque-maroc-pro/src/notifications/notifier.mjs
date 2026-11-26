@@ -54,7 +54,7 @@ export function computeNotificationIdInt(eventKey) {
     hash ^= str.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
-  return Math.abs(hash | 0) % 2147483000 + 1;
+  return (Math.abs(hash | 0) % 2147483000) + 1;
 }
 
 /**
@@ -79,8 +79,12 @@ export function adjustReminderDateToWorkingDay(ymdStr, minFloorDateStr, holidays
  * Combines a YYYY-MM-DD date string and HH:MM time string into an ISO timestamp / Date object.
  */
 export function combineDateAndTime(ymdStr, timeHHMM = '09:00') {
-  const [y, m, d] = String(ymdStr || getMoroccanTodayYMD()).split('-').map(Number);
-  const [hh, mm] = String(timeHHMM || '09:00').split(':').map(Number);
+  const [y, m, d] = String(ymdStr || getMoroccanTodayYMD())
+    .split('-')
+    .map(Number);
+  const [hh, mm] = String(timeHHMM || '09:00')
+    .split(':')
+    .map(Number);
   return new Date(y, (m || 1) - 1, d || 1, isNaN(hh) ? 9 : hh, isNaN(mm) ? 0 : mm, 0, 0);
 }
 
@@ -89,7 +93,9 @@ export function combineDateAndTime(ymdStr, timeHHMM = '09:00') {
  */
 function formatAmountDH(amount) {
   const num = Number(amount) || 0;
-  return num.toLocaleString('fr-FR', { minimumFractionDigits: num % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 }) + ' DH';
+  return (
+    num.toLocaleString('fr-FR', { minimumFractionDigits: num % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 }) + ' DH'
+  );
 }
 
 /**
@@ -294,7 +300,16 @@ export function buildNotificationPlan({
   const immediateAlerts = [];
   let skippedDeduplicatedCount = 0;
 
-  const settledStatuses = new Set(['paid', 'cashed', 'encaisse', 'cancelled', 'annule', 'expired', 'archived', 'archive']);
+  const settledStatuses = new Set([
+    'paid',
+    'cashed',
+    'encaisse',
+    'cancelled',
+    'annule',
+    'expired',
+    'archived',
+    'archive'
+  ]);
   const overdueExemptStatuses = new Set([...settledStatuses, 'deposited', 'depose']);
   const mapByDateCentimes = {};
   const plafondCentimes = toCentimes(plafondJournalier);
@@ -489,7 +504,6 @@ export function buildNotificationPlan({
   };
 }
 
-
 /**
  * Prunes sentNotificationsRegistry entries that belong to deleted, cancelled, or rescheduled cheques
  * so edited or restored cheques always trigger accurate reminders on their new dates.
@@ -498,7 +512,7 @@ export function pruneStaleSentNotificationsRegistry(sentRegistry = {}, operation
   const validPrefixes = new Set();
   const plafondCentimes = toCentimes(plafondJournalier);
   const activeDates = new Set();
-  for (const op of (operations || [])) {
+  for (const op of operations || []) {
     if (!op || !Array.isArray(op.tranches)) continue;
     for (let idx = 0; idx < op.tranches.length; idx++) {
       const tr = op.tranches[idx];
@@ -522,4 +536,117 @@ export function pruneStaleSentNotificationsRegistry(sentRegistry = {}, operation
     if (validPrefixes.has(k)) cleaned[k] = v;
   }
   return cleaned;
+}
+
+export function detectNotificationPlatform({ userAgent = '', isCapacitorNative = false, capacitorPlatform = '' } = {}) {
+  if (isCapacitorNative) {
+    const plat = String(capacitorPlatform || '').toLowerCase();
+    return plat === 'ios' ? 'capacitor-ios' : 'capacitor-android';
+  }
+  const ua = String(userAgent || '');
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'pwa-ios';
+  return 'pwa-web';
+}
+
+export function getHonestPlatformNotificationNote(platform, lang = 'fr') {
+  const l = ['fr', 'ar', 'en'].includes(lang) ? lang : 'fr';
+  if (platform === 'capacitor-android' || platform === 'capacitor-ios') {
+    if (l === 'ar') return 'تطبيق أصلي: تتم جدولة التذكيرات محلياً على جهازك حتى عند إغلاق التطبيق.';
+    if (l === 'en') return 'Native app: reminders are scheduled locally on your device even when the app is closed.';
+    return 'Application native : les rappels sont programmés localement sur votre appareil même lorsque l’application est fermée.';
+  }
+  if (platform === 'pwa-ios') {
+    if (l === 'ar')
+      return 'تنبيه iOS / الويب: إشعارات الخلفية في المتصفح غير مضمونة على iOS. اعتمد على شريط «مستحق اليوم / متأخر» داخل التطبيق.';
+    if (l === 'en')
+      return 'iOS Web / PWA note: background push notifications are best-effort and unreliable on iOS. Rely on the in-app "Due today / Overdue" banner.';
+    return 'Note Web / iOS : les notifications en arrière-plan sur navigateur sont aléatoires (surtout sur iOS). Fiez-vous au bandeau « Dus aujourd’hui / En retard » dans l’application.';
+  }
+  if (l === 'ar')
+    return 'نسخة الويب (PWA): قد تتأخر الإشعارات في الخلفية حسب المتصفح. الشريط الداخلي «مستحق اليوم / متأخر» يظل دائماً محدثاً.';
+  if (l === 'en')
+    return 'Web / PWA note: background browser notifications are best-effort when the app is closed. The in-app "Due today / Overdue" banner is always up to date.';
+  return 'Note Web / PWA : les notifications navigateur en arrière-plan restent aléatoires lorsque l’app est fermée. Le bandeau interne « Dus aujourd’hui / En retard » reste toujours fiable.';
+}
+
+export function getPermissionDeniedFallbackMessage(lang = 'fr') {
+  const l = ['fr', 'ar', 'en'].includes(lang) ? lang : 'fr';
+  if (l === 'ar')
+    return 'تم رفض إذن الإشعارات من النظام. فعّلها من إعدادات الجهاز، وسيبقى الشريط الداخلي «مستحق اليوم / متأخر» نشطاً.';
+  if (l === 'en')
+    return 'Notification permission is denied by your device/browser. Enable it in system settings; your in-app "Due today / Overdue" banner remains active.';
+  return 'Permission de notification refusée par l’appareil/navigateur. Activez-la dans les réglages système ; votre bandeau interne « Dus aujourd’hui / En retard » reste actif.';
+}
+
+/**
+ * Computes in-app "Due today / Overdue" banner summary strictly respecting `includeSensitiveDetails`
+ * (when false, NEVER includes any DH amount or beneficiary name in bannerText).
+ */
+export function computeDueAndOverdueSummary(
+  operations = [],
+  todayYMD = getMoroccanTodayYMD(),
+  { includeSensitiveDetails = false, lang = 'fr' } = {}
+) {
+  const l = ['fr', 'ar', 'en'].includes(lang) ? lang : 'fr';
+  const sensitive = Boolean(includeSensitiveDetails);
+  let dueTodayCount = 0;
+  let overdueCount = 0;
+  let dueTodayTotal = 0;
+  let overdueTotal = 0;
+
+  for (const op of operations || []) {
+    if (!op || op.deletedAt) continue;
+    for (const tr of op.tranches || []) {
+      if (!tr || ['paid', 'cancelled', 'expired'].includes(tr.status)) continue;
+      if (tr.date === todayYMD) {
+        dueTodayCount++;
+        dueTodayTotal += Number(tr.montant) || 0;
+      } else if (tr.date && tr.date < todayYMD) {
+        overdueCount++;
+        overdueTotal += Number(tr.montant) || 0;
+      }
+    }
+  }
+
+  if (dueTodayCount === 0 && overdueCount === 0) {
+    return { hasAlerts: false, dueTodayCount: 0, overdueCount: 0, bannerText: '' };
+  }
+
+  const fmtAmt = (n) => Number(n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' DH';
+  let bannerText = '';
+  if (l === 'ar') {
+    const parts = [];
+    if (dueTodayCount > 0)
+      parts.push(
+        sensitive ? `مستحق اليوم: ${dueTodayCount} (${fmtAmt(dueTodayTotal)})` : `مستحق اليوم: ${dueTodayCount} شيك`
+      );
+    if (overdueCount > 0)
+      parts.push(sensitive ? `متأخر: ${overdueCount} (${fmtAmt(overdueTotal)})` : `متأخر: ${overdueCount} شيك`);
+    bannerText = parts.join(' · ');
+  } else if (l === 'en') {
+    const parts = [];
+    if (dueTodayCount > 0)
+      parts.push(
+        sensitive ? `Due today: ${dueTodayCount} (${fmtAmt(dueTodayTotal)})` : `Due today: ${dueTodayCount} cheque(s)`
+      );
+    if (overdueCount > 0)
+      parts.push(
+        sensitive ? `Overdue: ${overdueCount} (${fmtAmt(overdueTotal)})` : `Overdue: ${overdueCount} cheque(s)`
+      );
+    bannerText = parts.join(' · ');
+  } else {
+    const parts = [];
+    if (dueTodayCount > 0)
+      parts.push(
+        sensitive
+          ? `Dus aujourd’hui : ${dueTodayCount} (${fmtAmt(dueTodayTotal)})`
+          : `Dus aujourd’hui : ${dueTodayCount} chèque(s)`
+      );
+    if (overdueCount > 0)
+      parts.push(
+        sensitive ? `En retard : ${overdueCount} (${fmtAmt(overdueTotal)})` : `En retard : ${overdueCount} chèque(s)`
+      );
+    bannerText = parts.join(' · ');
+  }
+  return { hasAlerts: true, dueTodayCount, overdueCount, bannerText };
 }
