@@ -512,6 +512,8 @@
     table { width: 100%; border-collapse: collapse; }
 
   
+/* END_OFFLINE_FALLBACK_ONLY */
+
     /* v12.2.0 Complete Arabic RTL Support & Official Google Sign-In Button Styling */
     html[dir="rtl"] body {
       text-align: right;
@@ -634,7 +636,6 @@
     }
 
   
-/* END_OFFLINE_FALLBACK_ONLY */
 
     /* v12.4.0 Unified Design Tokens, Accessibility Focus Rings, Reduced Motion & Dark Mode Contrast Parity */
     :focus-visible {

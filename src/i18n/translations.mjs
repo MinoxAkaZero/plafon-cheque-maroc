@@ -153,7 +153,7 @@ export const PCM_I18N = {
     msg_err_identity_conflict:
       'This Google email is already associated with an existing account. Sign in to your existing account first, then connect Google in Settings.',
     msg_err_backend_unconfigured:
-      'Cloud backend is not configured yet. Enter your Supabase URL and public Anon key in Settings.',
+      'Cloud backup is not configured in this build yet. You can continue using Local-Only mode safely, or configure Supabase in public/cloud-config.js before building.',
     msg_err_generic_auth: 'Authentication failed. Please check your connection and try again.',
     msg_ok_cfg_saved: '✓ Supabase server configuration saved.',
     msg_err_cfg_invalid: 'Please enter a valid Supabase URL (https://...) and public Anon key.',
@@ -167,7 +167,7 @@ export const PCM_I18N = {
     set_cat_appearance_title: 'Appearance & Language',
     set_cat_appearance_desc: 'Interface language (EN, AR, FR) and Light / Dark theme.',
     set_cat_security_title: 'Security & Privacy',
-    set_cat_security_desc: 'Local 4-digit app-lock PIN, auto-lock timer, recovery, and notification privacy.',
+    set_cat_security_desc: 'Local 6+ character app-lock PIN, auto-lock timer, recovery, and notification privacy.',
     set_cat_help_title: 'Help & About',
     set_cat_help_desc: 'Replay onboarding, user manual, FAQ, and app version.',
     set_acct_invite_title: 'Back up your cheques across devices',
@@ -614,7 +614,7 @@ export const PCM_I18N = {
     msg_err_identity_conflict:
       'Cette adresse Google est déjà associée à un compte existant. Connectez-vous d’abord à votre compte existant, puis associez Google dans Paramètres.',
     msg_err_backend_unconfigured:
-      'Le serveur cloud n’est pas encore configuré. Saisissez votre URL Supabase et votre clé publique Anon dans Paramètres.',
+      'La sauvegarde cloud n’est pas encore configurée dans cette version. Vous pouvez continuer en mode local uniquement, ou configurer Supabase dans public/cloud-config.js avant la compilation.',
     msg_err_generic_auth: 'Échec de l’authentification. Vérifiez votre connexion et réessayez.',
     msg_ok_cfg_saved: '✓ Configuration du serveur Supabase enregistrée.',
     msg_err_cfg_invalid: 'Veuillez saisir une URL Supabase valide (https://...) et la clé publique Anon.',

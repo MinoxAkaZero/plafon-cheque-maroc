@@ -207,8 +207,20 @@ export function registerCloudAuthUi(env) {
             'Votre adresse e-mail n’est pas encore vérifiée. Ouvrez le lien reçu par e-mail puis réessayez.',
             'error'
           );
+        } else if (err.code === 'CLOUD_NOT_CONFIGURED') {
+          setCloudAuthFeedback(
+            typeof env.pcmT === 'function'
+              ? env.pcmT('msg_err_backend_unconfigured')
+              : 'Cloud backup is not configured in this build yet.',
+            'error'
+          );
         } else if (err.code === 'RATE_LIMITED') {
-          setCloudAuthFeedback('Trop de requêtes. Veuillez patienter quelques instants.', 'error');
+          setCloudAuthFeedback(
+            typeof env.pcmT === 'function'
+              ? env.pcmT('msg_err_rate_limited')
+              : 'Trop de requêtes. Veuillez patienter quelques instants.',
+            'error'
+          );
         } else {
           setCloudAuthFeedback(err.message || 'Erreur lors de l’authentification.', 'error');
         }

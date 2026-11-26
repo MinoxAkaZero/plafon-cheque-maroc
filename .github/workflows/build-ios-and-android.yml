@@ -165,7 +165,7 @@ jobs:
   ios-build-and-archive:
     name: 5. iOS Testing Build & Signed App Store ExportArchive (v12.5.1)
     needs: [automated-unit-tests, browser-e2e-tests]
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
