@@ -1,80 +1,100 @@
-name: Build iOS IPA and Android APK
+name: CI — Lint, Typecheck, Vite Build, Unit, Security, Real RLS, E2E & Lighthouse
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ "main", "master" ]
 
 jobs:
-  build-ios:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Build Unsigned iOS IPA
-        run: |
-          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
-          cd "$PKG_DIR"
-          rm -f capacitor.config.ts
-          cat << 'EOF' > capacitor.config.json
-          {
-            "appId": "ma.plafondcheque.pro",
-            "appName": "PlafondCheque Pro",
-            "webDir": "public"
-          }
-          EOF
-          npm install @capacitor/core@6.2.3 @capacitor/cli@6.2.3 @capacitor/android@6.2.3 @capacitor/ios@6.2.3
-          rm -rf ios
-          npx cap add ios
-          npx cap sync ios
-          cd ios/App
-          if [ -d "App.xcworkspace" ]; then
-            xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
-          else
-            xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build
-          fi
-          mkdir -p "$GITHUB_WORKSPACE/Payload"
-          cp -r build/Build/Products/Release-iphoneos/App.app "$GITHUB_WORKSPACE/Payload/"
-          cd "$GITHUB_WORKSPACE"
-          zip -r PlafondCheque-Maroc-Pro-iOS.ipa Payload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: PlafondCheque-Maroc-Pro-iOS-IPA
-          path: PlafondCheque-Maroc-Pro-iOS.ipa
-
-  build-android:
+  automated-unit-tests:
+    name: 1. Lint, Typecheck, Official Vite Build & Node.js Suites
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - name: Build Android APK
+      - name: Install Dependencies, Lint, Typecheck & Build with Vite
         run: |
-          PKG_DIR=$(dirname "$(find . -name package.json -not -path '*/node_modules/*' | head -n 1)")
-          cd "$PKG_DIR"
-          rm -f capacitor.config.ts
-          cat << 'EOF' > capacitor.config.json
-          {
-            "appId": "ma.plafondcheque.pro",
-            "appName": "PlafondCheque Pro",
-            "webDir": "public"
-          }
-          EOF
-          npm install @capacitor/core@6.2.3 @capacitor/cli@6.2.3 @capacitor/android@6.2.3 @capacitor/ios@6.2.3
-          rm -rf android
-          npx cap add android
-          npx cap sync android
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/PlafondCheque-Maroc-Pro-Android.apk"
-      - uses: actions/upload-artifact@v4
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run format:check
+          npm run build
+      - name: Execute All Node.js Unit, Integration & Security Suites
+        run: |
+          npm test
+          npm run test:holidays
+          npm run test:notifications
+          npm run test:pin-lockout
+          npm run test:cloud
+          npm run test:e2ee
+          npm run test:e2ee-sync
+          npm run test:offline-sync
+          npm run test:i18n
+          npm run test:migration
+          npm run test:security
+          npm run test:tailwind
+          npm run test:ios-plugin
+          npm run test:release
+
+  supabase-rls-tests:
+    name: 2. Real Local Supabase RLS & delete-account Edge Function Tests
+    needs: automated-unit-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: PlafondCheque-Maroc-Pro-Android-APK
-          path: PlafondCheque-Maroc-Pro-Android.apk
+          node-version: '20'
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start Local Supabase, Apply Migrations & Run Real RLS Suite
+        run: |
+          supabase start
+          supabase db reset
+          supabase functions serve delete-account --no-verify-jwt &
+          sleep 4
+          STATUS_JSON=$(supabase status -o json)
+          export SUPABASE_URL=$(node -e "console.log(JSON.parse(process.argv[1]).API_URL)" "$STATUS_JSON")
+          export SUPABASE_ANON_KEY=$(node -e "console.log(JSON.parse(process.argv[1]).ANON_KEY)" "$STATUS_JSON")
+          export SUPABASE_SERVICE_ROLE_KEY=$(node -e "console.log(JSON.parse(process.argv[1]).SERVICE_ROLE_KEY)" "$STATUS_JSON")
+          node tests/rls_real_supabase.test.mjs
+      - name: Stop Local Supabase
+        if: always()
+        run: supabase stop
+
+  browser-e2e-tests:
+    name: 3. Headless Chromium E2E & Lighthouse (PWA / A11y / Performance >= 90)
+    needs: automated-unit-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          install-chromedriver: true
+      - name: Build dist/ with Vite & Run Unmocked Browser E2E Suite
+        run: |
+          npm ci
+          npm run build
+          pip install -r tests/requirements.txt
+          python3 tests/e2e_browser_audit.py
+      - name: Run Lighthouse Audit on Built dist/
+        run: |
+          npx --yes @lhci/cli@0.14.x autorun --collect.staticDistDir=./dist --assert.assertions.categories:pwa="[\"error\", {\"minScore\": 0.9}]" --assert.assertions.categories:accessibility="[\"error\", {\"minScore\": 0.9}]" --assert.assertions.categories:performance="[\"error\", {\"minScore\": 0.9}]"
