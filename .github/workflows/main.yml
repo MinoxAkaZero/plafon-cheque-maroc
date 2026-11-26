@@ -55,7 +55,7 @@ jobs:
           node-version: '20'
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: v2.19.7
       - name: Start Local Supabase, Apply Migrations & Run Real RLS Suite
         run: |
           supabase start
