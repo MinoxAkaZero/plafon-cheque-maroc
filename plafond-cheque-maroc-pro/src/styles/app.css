@@ -741,7 +741,10 @@
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
     }
+    .min-w-0 { min-width: 0; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fixed.inset-0 > div {
+      max-width: calc(100vw - 1.5rem);
       max-height: 92vh;
       max-height: 92dvh;
       margin-top: auto;
