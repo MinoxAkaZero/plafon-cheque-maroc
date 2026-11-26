@@ -757,8 +757,9 @@ try:
           await handleIncomingGoogleOAuthCallback(window.location.origin + '/?error=server_error&error_code=identity_already_exists');
           const conflictMsgOk = document.getElementById('onbAuthFeedbackBox').textContent.includes('already associated');
 
-          // Persist Arabic before reload test
+          // Persist Arabic before reload test (await saveState so IndexedDB commits before driver.refresh)
           setApplicationLanguageImmediate('ar');
+          await saveState();
           document.getElementById('onboardingOverlayModal').classList.add('hidden');
           document.getElementById('onboardingOverlayModal').classList.remove('flex');
 
